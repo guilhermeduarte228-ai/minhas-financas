@@ -45,7 +45,6 @@ st.markdown("""
         border-radius: 18px;
         padding: 14px 16px;
         margin-bottom: 10px;
-        transition: transform 0.2s ease;
     }
     .bank-card-container:hover { border-color: rgba(6, 182, 212, 0.4); }
     .bank-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -83,6 +82,8 @@ st.markdown("""
 def init_db():
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
+    
+    # 1. Cria a tabela de transações
     c.execute("""
         CREATE TABLE IF NOT EXISTS transacoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,11 +91,19 @@ def init_db():
             descricao TEXT,
             valor REAL,
             categoria TEXT,
-            banco TEXT,
-            meio TEXT,
             tipo TEXT
         )
     """)
+    
+    # Migração segura: garante que as colunas 'banco' e 'meio' existam mesmo em bancos já criados
+    c.execute("PRAGMA table_info(transacoes)")
+    colunas = [col[1] for col in c.fetchall()]
+    if "banco" not in colunas:
+        c.execute("ALTER TABLE transacoes ADD COLUMN banco TEXT DEFAULT 'Nubank'")
+    if "meio" not in colunas:
+        c.execute("ALTER TABLE transacoes ADD COLUMN meio TEXT DEFAULT 'Cartão de Crédito'")
+
+    # 2. Cria a tabela dos 5 bancos
     c.execute("""
         CREATE TABLE IF NOT EXISTS contas_bancarias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,9 +117,7 @@ def init_db():
             cheque_especial_usado REAL
         )
     """)
-    conn.commit()
     
-    # Cria os 5 bancos com valores iniciais se ainda não existirem
     c.execute("SELECT COUNT(*) FROM contas_bancarias")
     if c.fetchone()[0] == 0:
         bancos_dados = [
@@ -125,7 +132,8 @@ def init_db():
             (banco, cor_identificador, tem_cartao, limite_cartao, fatura_atual, saldo_conta, limite_cheque_especial, cheque_especial_usado)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, bancos_dados)
-        conn.commit()
+
+    conn.commit()
     conn.close()
 
 init_db()
@@ -185,7 +193,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Card de Resumo Geral com Iluminação Turquesa
+# Card de Resumo Geral
 st.markdown(f"""
 <div class="budget-card">
     <div class="budget-tag">TOTAL EM FATURAS DE CARTÃO</div>
@@ -197,7 +205,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Abas de navegação
+# Abas
 aba_bancos, aba_extrato, aba_nova, aba_ajustes = st.tabs([
     "🏦 Bancos & Cartões", 
     "📜 Extrato", 
@@ -247,20 +255,23 @@ with aba_extrato:
     st.caption("ÚLTIMOS LANÇAMENTOS REGISTRADOS")
     if df_tx.empty:
         st.info("Nenhuma transação registrada ainda.")
-    for idx, row in df_tx.iterrows():
-        is_saida = row["tipo"] == "Saída"
-        sinal = "-" if is_saida else "+"
-        cls_v = "tx-loss" if is_saida else "tx-gain"
-        st.markdown(f"""
-        <div class="tx-row">
-            <div>
-                <p class="tx-name">{row["descricao"]}</p>
-                <p class="tx-info">{row["data"]} • {row["banco"]} ({row["meio"]})</p>
-                <span class="tx-tag">{row["categoria"]}</span>
+    else:
+        for idx, row in df_tx.iterrows():
+            is_saida = row["tipo"] == "Saída"
+            sinal = "-" if is_saida else "+"
+            cls_v = "tx-loss" if is_saida else "tx-gain"
+            banco_nome = row.get("banco", "Banco")
+            meio_nome = row.get("meio", "Operação")
+            st.markdown(f"""
+            <div class="tx-row">
+                <div>
+                    <p class="tx-name">{row["descricao"]}</p>
+                    <p class="tx-info">{row["data"]} • {banco_nome} ({meio_nome})</p>
+                    <span class="tx-tag">{row["categoria"]}</span>
+                </div>
+                <div><p class="{cls_v}">{sinal} R$ {row["valor"]:,.2f}</p></div>
             </div>
-            <div><p class="{cls_v}">{sinal} R$ {row["valor"]:,.2f}</p></div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
 with aba_nova:
     st.markdown("#### Registrar Transação")
@@ -274,7 +285,7 @@ with aba_nova:
         
         if st.form_submit_button("⚡ Salvar Lançamento"):
             adicionar_transacao(
-                datetime.now().strftime("%d Nov, %H:%M"), 
+                datetime.now().strftime("%d %b, %H:%M"), 
                 desc, 
                 val, 
                 cat, 
