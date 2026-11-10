@@ -4,9 +4,9 @@ import sqlite3
 import requests
 from datetime import datetime
 
-st.set_page_config(page_title="Finanças Pro", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="Minhas Finanças", page_icon="⚡", layout="centered")
 
-# Estilo Ultra-Moderno / Cyber Glassmorphism Fintech
+# Estilo Moderno inspirado na estética modular e limpa do MacroDroid (Dark Card UI / Bento Grid)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
@@ -16,289 +16,256 @@ st.markdown("""
         box-sizing: border-box;
     }
     
+    /* Fundo escuro fosco e suave */
     .stApp { 
-        background: radial-gradient(circle at 50% 0%, #061726 0%, #03070b 60%, #000204 100%) !important; 
+        background: #0f131a !important; 
         color: #f1f5f9; 
     }
     
     .block-container { 
         max-width: 440px !important; 
         padding-top: 1rem !important; 
-        padding-bottom: 3rem !important;
+        padding-bottom: 3.5rem !important;
     }
 
     #MainMenu, footer, header { visibility: hidden; }
 
-    /* Topo / Header Futurista */
-    .header-box { 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        margin-bottom: 1.2rem; 
+    /* Barra Superior / Header */
+    .md-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.2rem;
         padding: 4px 2px;
     }
-    .user-name { 
-        font-size: 1.35rem; 
-        font-weight: 800; 
-        color: #ffffff; 
-        letter-spacing: -0.6px; 
-        margin: 0; 
+    .md-title-box h2 {
+        font-size: 1.25rem;
+        font-weight: 800;
+        color: #ffffff;
+        margin: 0;
+        letter-spacing: -0.4px;
     }
-    .user-subtitle { 
-        font-size: 0.72rem; 
-        color: #22d3ee; 
-        margin-top: 3px; 
-        font-weight: 600;
-        letter-spacing: 0.4px;
-        text-transform: uppercase;
+    .md-title-box span {
+        font-size: 0.72rem;
+        color: #94a3b8;
+        font-weight: 500;
     }
-    
-    .pill-badge {
-        background: rgba(6, 182, 212, 0.08);
-        color: #22d3ee;
-        border: 1px solid rgba(6, 182, 212, 0.35);
-        padding: 6px 14px;
-        border-radius: 9999px;
-        font-size: 0.68rem;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        box-shadow: 0 0 16px rgba(6, 182, 212, 0.2);
+    .md-status-badge {
         display: flex;
         align-items: center;
         gap: 6px;
+        background: #1e293b;
+        color: #38bdf8;
+        border: 1px solid #334155;
+        padding: 6px 12px;
+        border-radius: 9999px;
+        font-size: 0.7rem;
+        font-weight: 700;
     }
-    .live-dot {
-        width: 6px;
-        height: 6px;
-        background: #00f2fe;
+    .md-dot-active {
+        width: 8px;
+        height: 8px;
+        background-color: #22c55e;
         border-radius: 50%;
-        box-shadow: 0 0 8px #00f2fe;
-        display: inline-block;
+        box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
     }
 
-    /* Master Card Holográfico */
-    .master-card {
-        background: linear-gradient(135deg, rgba(8, 51, 68, 0.45) 0%, rgba(3, 10, 16, 0.85) 100%);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(34, 211, 238, 0.35);
-        border-radius: 26px;
-        padding: 1.5rem;
-        box-shadow: 0 20px 45px -12px rgba(6, 182, 212, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-        margin-bottom: 1.4rem;
+    /* Card Master Bento Style */
+    .md-hero-card {
+        background: linear-gradient(145deg, #1e293b 0%, #151d2a 100%);
+        border: 1px solid #334155;
+        border-radius: 22px;
+        padding: 1.3rem;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
         position: relative;
-        overflow: hidden;
     }
-    .master-card::after {
-        content: '';
-        position: absolute;
-        top: -40%;
-        right: -20%;
-        width: 160px;
-        height: 160px;
-        background: radial-gradient(circle, rgba(6, 182, 212, 0.25) 0%, transparent 70%);
-        pointer-events: none;
+    .md-hero-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
     }
-    .master-tag { 
-        font-size: 0.65rem; 
-        font-weight: 800; 
-        color: #67e8f9; 
-        letter-spacing: 1.5px; 
-        text-transform: uppercase; 
-    }
-    .master-val { 
+    .md-hero-val {
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 2.2rem; 
-        font-weight: 800; 
-        color: #ffffff; 
-        letter-spacing: -1px; 
-        margin: 8px 0; 
-        text-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+        font-size: 2.1rem;
+        font-weight: 800;
+        color: #ffffff;
+        margin: 6px 0 10px 0;
+        letter-spacing: -1px;
     }
-    .master-sub { 
-        font-size: 0.74rem; 
-        color: #94a3b8; 
+    .md-msg-pill {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    .msg-danger { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .msg-warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .msg-success { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .msg-neutral { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+    .md-hero-footer {
         display: flex;
         justify-content: space-between;
-        margin-top: 10px;
         padding-top: 10px;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        border-top: 1px solid #27354a;
+        font-size: 0.75rem;
+        color: #94a3b8;
     }
 
-    /* Cards dos Bancos */
-    .sec-title { 
-        font-size: 0.72rem; 
-        font-weight: 800; 
-        color: #64748b; 
-        text-transform: uppercase; 
-        letter-spacing: 1.2px; 
-        margin: 1.2rem 0 0.7rem 0;
+    /* Grid de Blocos Estilo MacroDroid Tiles */
+    .tile-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-bottom: 1.4rem;
     }
+    .md-tile {
+        background: #182232;
+        border: 1px solid #27364b;
+        border-radius: 16px;
+        padding: 12px 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 6px;
+        transition: transform 0.15s ease;
+    }
+    .md-tile-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+    }
+    .icon-blue { background: #0369a1; color: #38bdf8; }
+    .icon-orange { background: #9a3412; color: #fdba74; }
+    .icon-emerald { background: #065f46; color: #6ee7b7; }
+    .icon-purple { background: #6b21a8; color: #d8b4fe; }
     
+    .md-tile-text {
+        font-size: 0.66rem;
+        font-weight: 700;
+        color: #e2e8f0;
+    }
+
+    /* Lista de Instituições / Bancos */
+    .sec-header {
+        font-size: 0.75rem;
+        font-weight: 800;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        margin: 1.2rem 0 0.8rem 0;
+    }
     .bank-card {
-        background: linear-gradient(180deg, rgba(15, 23, 42, 0.65) 0%, rgba(8, 14, 23, 0.85) 100%);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        border: 1px solid rgba(255, 255, 255, 0.07);
-        border-radius: 20px;
-        padding: 16px;
-        margin-bottom: 12px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        background: #151d2a;
+        border: 1px solid #243247;
+        border-radius: 18px;
+        padding: 14px;
+        margin-bottom: 10px;
         position: relative;
     }
-    .bank-card:hover {
-        border-color: rgba(34, 211, 238, 0.45);
-        transform: translateY(-2px);
-        box-shadow: 0 10px 25px -10px rgba(6, 182, 212, 0.25);
-    }
-    
-    .bank-title-bar {
+    .bank-card-top {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
     }
-    .bank-name-badge {
+    .bank-badge {
         font-size: 0.88rem;
         font-weight: 800;
         color: #ffffff;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
     }
-    .bank-glow-pill {
+    .bank-dot {
         width: 10px;
         height: 10px;
-        border-radius: 50%;
-        box-shadow: 0 0 10px currentColor;
+        border-radius: 4px;
     }
-    .bank-type-pill {
-        font-size: 0.6rem;
-        font-weight: 700;
-        color: #06b6d4;
-        background: rgba(6, 182, 212, 0.08);
-        border: 1px solid rgba(6, 182, 212, 0.25);
-        padding: 3px 8px;
-        border-radius: 9999px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    /* Grid Interno dos Valores */
-    .metric-grid {
+    
+    .bank-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
     }
-    .metric-cell {
-        background: rgba(3, 7, 18, 0.45);
-        border: 1px solid rgba(255, 255, 255, 0.04);
-        border-radius: 14px;
-        padding: 10px 12px;
+    .bank-stat {
+        background: #0f1622;
+        border: 1px solid #1e2c3f;
+        border-radius: 12px;
+        padding: 10px;
     }
-    .metric-cell-full {
+    .bank-stat-full {
         grid-column: span 2;
-        background: rgba(3, 7, 18, 0.55);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 14px;
-        padding: 10px 12px;
+        background: #0f1622;
+        border: 1px solid #1e2c3f;
+        border-radius: 12px;
+        padding: 10px;
     }
-    
-    .metric-label-row {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 0.64rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        color: #64748b;
-    }
-    .metric-value {
-        font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.95rem;
-        font-weight: 800;
-        color: #ffffff;
-        margin-top: 4px;
-    }
-    .metric-caption {
+    .bank-stat-lbl {
         font-size: 0.62rem;
         color: #64748b;
-        margin-top: 2px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    .bank-stat-val {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #ffffff;
+        margin-top: 3px;
+    }
+    .bank-msg {
+        font-size: 0.65rem;
+        font-weight: 600;
+        margin-top: 3px;
     }
 
-    .color-fatura { color: #22d3ee; }
-    .color-saldo { color: #34d399; }
-    .color-alerta { color: #f59e0b; }
-    .color-perigo { color: #f87171; }
-
-    /* Abas Estilizadas */
+    /* Abas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
-        background-color: rgba(15, 23, 42, 0.6);
+        background-color: #151d2a;
         padding: 6px;
         border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        border: 1px solid #243247;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 38px;
-        border-radius: 12px;
+        height: 36px;
+        border-radius: 10px;
         color: #94a3b8;
-        font-size: 0.74rem;
+        font-size: 0.72rem;
         font-weight: 700;
         border: none !important;
         background: transparent;
-        padding: 0 12px;
+        padding: 0 10px;
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(8, 51, 68, 0.6) 100%) !important;
-        color: #22d3ee !important;
-        border: 1px solid rgba(34, 211, 238, 0.4) !important;
-        box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+        background-color: #243247 !important;
+        color: #38bdf8 !important;
     }
     .stTabs [data-baseweb="tab-highlight"] { display: none; }
 
-    /* Botão com Gradiente Neomórfico */
+    /* Botão Primário */
     .stButton > button {
         width: 100%;
-        background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%) !important;
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
         color: #ffffff !important;
         border: none !important;
         border-radius: 14px !important;
         font-weight: 800 !important;
-        font-size: 0.85rem !important;
-        letter-spacing: 0.5px !important;
-        padding: 0.65rem 1rem !important;
-        box-shadow: 0 0 20px rgba(6, 182, 212, 0.35) !important;
-        transition: all 0.2s ease !important;
-    }
-    .stButton > button:hover {
-        transform: translateY(-1px) !important;
-        box-shadow: 0 0 28px rgba(6, 182, 212, 0.5) !important;
-    }
-
-    /* Linhas do Extrato */
-    .tx-item {
-        background: rgba(15, 23, 42, 0.45);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 16px;
-        padding: 12px 16px;
-        margin-bottom: 8px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .tx-title { font-size: 0.86rem; font-weight: 700; color: #ffffff; margin: 0; }
-    .tx-meta { font-size: 0.68rem; color: #64748b; margin-top: 3px; }
-    .tx-tag { 
-        font-size: 0.62rem; 
-        color: #22d3ee; 
-        background: rgba(6, 182, 212, 0.1); 
-        border: 1px solid rgba(6, 182, 212, 0.2); 
-        padding: 2px 8px; 
-        border-radius: 6px; 
-        font-weight: 600;
+        font-size: 0.86rem !important;
+        padding: 0.7rem 1rem !important;
+        box-shadow: 0 4px 15px rgba(2, 132, 199, 0.3) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -314,16 +281,11 @@ def init_db():
             descricao TEXT,
             valor REAL,
             categoria TEXT,
-            tipo TEXT
+            tipo TEXT,
+            banco TEXT DEFAULT 'Nubank',
+            meio TEXT DEFAULT 'Cartão de Crédito'
         )
     """)
-    c.execute("PRAGMA table_info(transacoes)")
-    colunas = [col[1] for col in c.fetchall()]
-    if "banco" not in colunas:
-        c.execute("ALTER TABLE transacoes ADD COLUMN banco TEXT DEFAULT 'Nubank'")
-    if "meio" not in colunas:
-        c.execute("ALTER TABLE transacoes ADD COLUMN meio TEXT DEFAULT 'Cartão de Crédito'")
-
     c.execute("""
         CREATE TABLE IF NOT EXISTS contas_bancarias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -337,14 +299,13 @@ def init_db():
             cheque_especial_usado REAL
         )
     """)
-    
     c.execute("SELECT COUNT(*) FROM contas_bancarias")
     if c.fetchone()[0] == 0:
         bancos_dados = [
-            ("Nubank", "#a855f7", 1, 5000.00, 1840.50, 450.00, 0.00, 0.00),
+            ("Nubank", "#a855f7", 1, 5000.00, 1840.50, 0.00, 0.00, 0.00),
             ("Caixa Econômica", "#38bdf8", 1, 3500.00, 920.00, 1250.00, 2000.00, 350.00),
-            ("Mercado Pago", "#22d3ee", 1, 2800.00, 430.00, 510.00, 1500.00, 0.00),
-            ("Bradesco", "#f43f5e", 1, 4000.00, 780.00, 320.00, 1800.00, 500.00),
+            ("Mercado Pago", "#22d3ee", 1, 2800.00, 430.00, 12.50, 1500.00, 0.00),
+            ("Bradesco", "#f43f5e", 1, 4000.00, 780.00, -150.00, 1800.00, 500.00),
             ("Inter", "#fb923c", 1, 6000.00, 610.00, 4210.10, 1000.00, 0.00)
         ]
         c.executemany("""
@@ -394,240 +355,177 @@ def adicionar_transacao(data, desc, valor, cat, banco, meio, tipo):
     conn.commit()
     conn.close()
 
-# ----------------- INTEGRAÇÃO PLUGGY (OPEN FINANCE) -----------------
-def obter_token_pluggy():
-    client_id = st.secrets.get("PLUGGY_CLIENT_ID")
-    client_secret = st.secrets.get("PLUGGY_CLIENT_SECRET")
-    
-    if not client_id or not client_secret:
-        return None
-        
-    try:
-        url = "https://api.pluggy.ai/auth"
-        payload = {"clientId": client_id, "clientSecret": client_secret}
-        res = requests.post(url, json=payload, timeout=10)
-        if res.status_code in [200, 201]:
-            return res.json().get("apiKey")
-    except Exception:
-        pass
-    return None
-
-def criar_connect_token_pluggy(api_key):
-    try:
-        url = "https://api.pluggy.ai/connect_token"
-        headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
-        res = requests.post(url, json={}, headers=headers, timeout=10)
-        if res.status_code in [200, 201]:
-            return res.json().get("accessToken")
-    except Exception:
-        pass
-    return None
-
-def sincronizar_dados_bancarios(api_key):
-    headers = {"X-API-KEY": api_key}
-    try:
-        res_contas = requests.get("https://api.pluggy.ai/accounts", headers=headers, timeout=12)
-        if res_contas.status_code == 200:
-            items = res_contas.json().get("results", [])
-            conn = sqlite3.connect("financas.db")
-            c = conn.cursor()
-            for it in items:
-                banco_raw = (it.get("name") or "").lower()
-                saldo = float(it.get("balance", 0.0))
-                overdraft = float(it.get("overdraftLimit", 0.0) or 0.0)
-                
-                banco_alvo = None
-                if "nu" in banco_raw: banco_alvo = "Nubank"
-                elif "caixa" in banco_raw: banco_alvo = "Caixa Econômica"
-                elif "mercado" in banco_raw: banco_alvo = "Mercado Pago"
-                elif "bradesco" in banco_raw: banco_alvo = "Bradesco"
-                elif "inter" in banco_raw: banco_alvo = "Inter"
-                
-                if banco_alvo:
-                    c.execute("""
-                        UPDATE contas_bancarias 
-                        SET saldo_conta = ?, limite_cheque_especial = ?
-                        WHERE banco = ?
-                    """, (saldo, overdraft, banco_alvo))
-            conn.commit()
-            conn.close()
-            return True, len(items)
-    except Exception as e:
-        return False, str(e)
-    return False, "Nenhuma conta retornada."
+# Função de Mensagens Personalizadas de Saldo
+def get_status_saldo(saldo):
+    if saldo < 0:
+        return "🚨 No vermelho (Socorro!)", "msg-danger"
+    elif saldo == 0.0:
+        return "🙏 Preciso de um milagre", "msg-danger"
+    elif 0 < saldo <= 20.0:
+        return "🍞 Dá só pro pão na chapa", "msg-warning"
+    elif 20.0 < saldo <= 100.0:
+        return "⚠️ Cuidado com o Pix", "msg-warning"
+    elif 100.0 < saldo <= 1000.0:
+        return "🧘 Sobrevivendo com dignidade", "msg-neutral"
+    else:
+        return "🚀 Modo patrão ativado", "msg-success"
 
 df_bancos = get_contas()
 df_tx = get_transacoes()
 
 total_faturas = df_bancos["fatura_atual"].sum()
-total_saldos_conta = df_bancos["saldo_conta"].sum()
-total_cheque_usado = df_bancos["cheque_especial_usado"].sum()
+total_saldos = df_bancos["saldo_conta"].sum()
+total_cheque = df_bancos["cheque_especial_usado"].sum()
 
-# Topo / Header
+msg_total, classe_total = get_status_saldo(total_saldos)
+
+# Barra Superior
 st.markdown("""
-<div class="header-box">
-    <div>
-        <h2 class="user-name">Guilherme</h2>
-        <div class="user-subtitle">Patrimônio Integrado</div>
+<div class="md-header">
+    <div class="md-title-box">
+        <h2>Painel Financeiro</h2>
+        <span>Visão Integrada de Bancos</span>
     </div>
-    <div class="pill-badge">
-        <span class="live-dot"></span>
-        5 Bancos Ativos
+    <div class="md-status-badge">
+        <span class="md-dot-active"></span>
+        Sincronizado
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Master Card com Iluminação Neomórfica
+# Master Hero Card
 st.markdown(f"""
-<div class="master-card">
-    <div class="master-tag">Faturas de Cartão</div>
-    <div class="master-val">R$ {total_faturas:,.2f}</div>
-    <div class="master-sub">
-        <span>Saldos: <strong style="color: #ffffff;">R$ {total_saldos_conta:,.2f}</strong></span>
-        <span>Cheque Esp.: <strong style="color: #f59e0b;">R$ {total_cheque_usado:,.2f}</strong></span>
+<div class="md-hero-card">
+    <div class="md-hero-label">Patrimônio em Conta</div>
+    <div class="md-hero-val">R$ {total_saldos:,.2f}</div>
+    <div class="md-msg-pill {classe_total}">{msg_total}</div>
+    <div class="md-hero-footer">
+        <span>Faturas: <strong style="color: #ffffff;">R$ {total_faturas:,.2f}</strong></span>
+        <span>Cheque Esp.: <strong style="color: #f87171;">R$ {total_cheque:,.2f}</strong></span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Abas de Navegação
-tab_bancos, tab_sync, tab_extrato, tab_novo, tab_ajustes = st.tabs([
+# Grid de Ações / Blocos Estilo MacroDroid
+st.markdown("""
+<div class="tile-grid">
+    <div class="md-tile">
+        <div class="md-tile-icon icon-blue">💳</div>
+        <span class="md-tile-text">Cartões</span>
+    </div>
+    <div class="md-tile">
+        <div class="md-tile-icon icon-orange">🔄</div>
+        <span class="md-tile-text">Pix</span>
+    </div>
+    <div class="md-tile">
+        <div class="md-tile-icon icon-emerald">📊</div>
+        <span class="md-tile-text">Gráficos</span>
+    </div>
+    <div class="md-tile">
+        <div class="md-tile-icon icon-purple">⚡</div>
+        <span class="md-tile-text">Extrato</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Navegação por Abas
+tab_bancos, tab_extrato, tab_novo, tab_ajustes = st.tabs([
     "Bancos", 
-    "Open Finance",
     "Extrato", 
-    "Novo Gasto", 
+    "Lançar", 
     "Ajustes"
 ])
 
 with tab_bancos:
-    st.markdown('<div class="sec-title">Detalhamento por Instituição</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-header">Contas & Cartões</div>', unsafe_allow_html=True)
     
     for _, b in df_bancos.iterrows():
         lim_disp = max(0.0, b["limite_cartao"] - b["fatura_atual"])
+        b_saldo = b["saldo_conta"]
+        msg_banco, cls_banco = get_status_saldo(b_saldo)
+        
         st.markdown(f"""
         <div class="bank-card">
-            <div class="bank-title-bar">
-                <span class="bank-name-badge">
-                    <span class="bank-glow-pill" style="background-color: {b['cor_identificador']}; color: {b['cor_identificador']};"></span>
+            <div class="bank-card-top">
+                <span class="bank-badge">
+                    <span class="bank-dot" style="background-color: {b['cor_identificador']};"></span>
                     {b['banco']}
                 </span>
-                <span class="bank-type-pill">Conta & Limite</span>
+                <span class="md-msg-pill {cls_banco}" style="margin-bottom: 0; font-size: 0.65rem;">
+                    {msg_banco}
+                </span>
             </div>
-            <div class="metric-grid">
-                <div class="metric-cell">
-                    <div class="metric-label-row color-fatura">💳 Fatura</div>
-                    <div class="metric-value">R$ {b['fatura_atual']:,.2f}</div>
-                    <div class="metric-caption">Disp: R$ {lim_disp:,.2f}</div>
+            <div class="bank-grid">
+                <div class="bank-stat">
+                    <div class="bank-stat-lbl">Saldo Conta</div>
+                    <div class="bank-stat-val">R$ {b_saldo:,.2f}</div>
                 </div>
-                <div class="metric-cell">
-                    <div class="metric-label-row color-saldo">💰 Saldo</div>
-                    <div class="metric-value">R$ {b['saldo_conta']:,.2f}</div>
-                    <div class="metric-caption">Disponível</div>
+                <div class="bank-stat">
+                    <div class="bank-stat-lbl">Fatura Cartão</div>
+                    <div class="bank-stat-val" style="color: #38bdf8;">R$ {b['fatura_atual']:,.2f}</div>
+                    <div style="font-size: 0.62rem; color: #64748b; margin-top: 2px;">Disp: R$ {lim_disp:,.2f}</div>
                 </div>
-                <div class="metric-cell-full">
-                    <div class="metric-label-row color-alerta">⚠️ Cheque Especial</div>
-                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
-                        <span class="metric-value" style="color: {'#f87171' if b['cheque_especial_usado'] > 0 else '#ffffff'}; font-size: 0.88rem;">
-                            Usado: R$ {b['cheque_especial_usado']:,.2f}
+                <div class="bank-stat-full">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="bank-stat-lbl">Cheque Especial Usado</span>
+                        <span style="font-family: 'JetBrains Mono'; font-size: 0.85rem; font-weight: 700; color: {'#f87171' if b['cheque_especial_usado'] > 0 else '#94a3b8'};">
+                            R$ {b['cheque_especial_usado']:,.2f}
                         </span>
-                        <span style="font-size: 0.65rem; color: #94a3b8; font-weight: 600;">Limite: R$ {b['limite_cheque_especial']:,.2f}</span>
                     </div>
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-with tab_sync:
-    st.markdown('<div class="sec-title">Sincronização Bancária Pluggy</div>', unsafe_allow_html=True)
-    
-    api_key = obter_token_pluggy()
-    
-    if not api_key:
-        st.error("Credenciais da Pluggy não encontradas nos Secrets ou inválidas. Verifique o painel do Streamlit Cloud.")
-    else:
-        st.success("Conexão autenticada com o Open Finance Pluggy.")
-        
-        connect_token = criar_connect_token_pluggy(api_key)
-        if connect_token:
-            # URL corrigida com parâmetro connect_token
-            widget_url = f"https://connect.pluggy.ai/?connect_token={connect_token}"
-            
-            st.markdown(f"""
-            <a href="{widget_url}" target="_blank" style="text-decoration: none;">
-                <div style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(8, 51, 68, 0.6) 100%); border: 1px solid rgba(34, 211, 238, 0.4); padding: 14px; border-radius: 14px; text-align: center; color: #22d3ee; font-weight: 700; font-size: 0.9rem; margin-bottom: 14px;">
-                    🔗 Conectar Novo Banco (Nubank, Caixa, Inter...)
-                </div>
-            </a>
-            """, unsafe_allow_html=True)
-            st.caption("Ao tocar no botão acima, autentique a conta pretendida no portal seguro da Pluggy.")
-        else:
-            st.warning("Não foi possível gerar o token temporário da Pluggy. Verifique se o plano developer está ativo no painel.")
-        
-        if st.button("🔄 Puxar Saldos e Atualizar App"):
-            ok, msg = sincronizar_dados_bancarios(api_key)
-            if ok:
-                st.success(f"{msg} contas sincronizadas com sucesso!")
-                st.rerun()
-            else:
-                st.warning(f"Status da sincronização: {msg}")
-
 with tab_extrato:
-    st.markdown('<div class="sec-title">Últimos Movimentos</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-header">Movimentações Recentes</div>', unsafe_allow_html=True)
     if df_tx.empty:
-        st.info("Nenhuma movimentação registrada.")
+        st.info("Nenhuma transação registrada.")
     else:
         for _, row in df_tx.iterrows():
             is_saida = row["tipo"] == "Saída"
             sinal = "-" if is_saida else "+"
-            cls_v = "color-perigo" if is_saida else "color-saldo"
-            banco_nome = row.get("banco", "Banco")
-            meio_nome = row.get("meio", "Operação")
+            cor = "#f87171" if is_saida else "#4ade80"
             st.markdown(f"""
-            <div class="tx-item">
+            <div style="background: #151d2a; border: 1px solid #243247; border-radius: 14px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <p class="tx-title">{row["descricao"]}</p>
-                    <p class="tx-meta">{row["data"]} • {banco_nome} ({meio_nome})</p>
-                    <span class="tx-tag">{row["categoria"]}</span>
+                    <div style="font-size: 0.85rem; font-weight: 700; color: #ffffff;">{row['descricao']}</div>
+                    <div style="font-size: 0.68rem; color: #64748b;">{row['data']} • {row['banco']}</div>
                 </div>
-                <div class="metric-value {cls_v}">{sinal} R$ {row["valor"]:,.2f}</div>
+                <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.9rem; color: {cor};">
+                    {sinal} R$ {row['valor']:,.2f}
+                </div>
             </div>
             """, unsafe_allow_html=True)
 
 with tab_novo:
-    st.markdown('<div class="sec-title">Registrar Movimentação</div>', unsafe_allow_html=True)
-    with st.form("form_novo_lancamento"):
-        desc = st.text_input("Descrição / Estabelecimento", value="Restaurante / Compra")
-        val = st.number_input("Valor (R$)", value=45.00, min_value=0.01, step=1.0)
-        banco = st.selectbox("Instituição", df_bancos["banco"].tolist())
+    st.markdown('<div class="sec-header">Nova Transação</div>', unsafe_allow_html=True)
+    with st.form("form_novo_lanc"):
+        desc = st.text_input("Descrição", value="Mercado / Compra")
+        val = st.number_input("Valor (R$)", value=25.00, min_value=0.01, step=1.0)
+        banco = st.selectbox("Banco", df_bancos["banco"].tolist())
         meio = st.radio("Método", ["Cartão de Crédito", "Conta Corrente / Pix"], horizontal=True)
-        cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Saúde", "Contas Fixas", "Lazer", "Renda", "Outros"])
-        tipo = st.selectbox("Tipo de Operação", ["Saída", "Entrada"])
+        cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Outros"])
+        tipo = st.selectbox("Tipo", ["Saída", "Entrada"])
         
-        if st.form_submit_button("⚡ Registrar Transação"):
-            adicionar_transacao(
-                datetime.now().strftime("%d %b, %H:%M"), 
-                desc, 
-                val, 
-                cat, 
-                banco, 
-                meio, 
-                tipo
-            )
-            st.success("Operação realizada com sucesso!")
+        if st.form_submit_button("Confirmar Lançamento"):
+            adicionar_transacao(datetime.now().strftime("%d/%m %H:%M"), desc, val, cat, banco, meio, tipo)
+            st.success("Transação registrada com sucesso!")
             st.rerun()
 
 with tab_ajustes:
-    st.markdown('<div class="sec-title">Ajuste de Limites & Contratos</div>', unsafe_allow_html=True)
-    banco_edit = st.selectbox("Selecionar Banco", df_bancos["banco"].tolist())
-    linha = df_bancos[df_bancos["banco"] == banco_edit].iloc[0]
+    st.markdown('<div class="sec-header">Ajuste de Valores Reais</div>', unsafe_allow_html=True)
+    banco_edit = st.selectbox("Selecione o Banco", df_bancos["banco"].tolist())
+    row_banco = df_bancos[df_bancos["banco"] == banco_edit].iloc[0]
     
-    with st.form("form_edit_banco"):
-        fat = st.number_input("Fatura Atual do Cartão (R$)", value=float(linha["fatura_atual"]), step=50.0)
-        lim_c = st.number_input("Limite Concedido do Cartão (R$)", value=float(linha["limite_cartao"]), step=100.0)
-        sal = st.number_input("Saldo Disponível em Conta (R$)", value=float(linha["saldo_conta"]), step=50.0)
-        lim_ch = st.number_input("Limite de Cheque Especial (R$)", value=float(linha["limite_cheque_especial"]), step=100.0)
-        ch_usado = st.number_input("Cheque Especial Consumido (R$)", value=float(linha["cheque_especial_usado"]), step=50.0)
+    with st.form("form_edit_saldo"):
+        novo_saldo = st.number_input("Saldo em Conta (R$)", value=float(row_banco["saldo_conta"]), step=10.0)
+        nova_fat = st.number_input("Fatura do Cartão (R$)", value=float(row_banco["fatura_atual"]), step=10.0)
+        novo_lim = st.number_input("Limite do Cartão (R$)", value=float(row_banco["limite_cartao"]), step=100.0)
+        lim_ch = st.number_input("Limite Cheque Especial (R$)", value=float(row_banco["limite_cheque_especial"]), step=100.0)
+        ch_usado = st.number_input("Cheque Especial Usado (R$)", value=float(row_banco["cheque_especial_usado"]), step=10.0)
         
-        if st.form_submit_button("💾 Salvar Parâmetros"):
-            atualizar_banco(banco_edit, fat, lim_c, sal, lim_ch, ch_usado)
-            st.success(f"Parâmetros de {banco_edit} atualizados!")
+        if st.form_submit_button("Salvar Valores"):
+            atualizar_banco(banco_edit, nova_fat, novo_lim, novo_saldo, lim_ch, ch_usado)
+            st.success("Valores atualizados!")
             st.rerun()
