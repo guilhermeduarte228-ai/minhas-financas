@@ -114,6 +114,26 @@ st.markdown("""
         color: #94a3b8;
     }
 
+    /* Estilização específica dos botões de Recursos Rápidos */
+    div[data-testid="column"] button {
+        background: #141d2a !important;
+        border: 1px solid #223247 !important;
+        border-radius: 14px !important;
+        color: #f1f5f9 !important;
+        font-size: 0.74rem !important;
+        font-weight: 700 !important;
+        padding: 0.6rem 0.2rem !important;
+        min-height: 48px !important;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
+        transition: all 0.2s ease !important;
+        white-space: nowrap !important;
+    }
+    div[data-testid="column"] button:hover {
+        border-color: #38bdf8 !important;
+        color: #38bdf8 !important;
+        transform: translateY(-1px) !important;
+    }
+
     /* Bancos / Cards */
     .sec-header {
         font-size: 0.75rem;
@@ -182,12 +202,13 @@ st.markdown("""
         margin-top: 3px;
     }
 
-    /* Modal / Painel Expansível */
+    /* Painel Expansível de Detalhe */
     .panel-box {
         background: #141e2e;
         border: 1px solid #23354f;
         border-radius: 18px;
         padding: 16px;
+        margin-top: 0.8rem;
         margin-bottom: 1.4rem;
     }
 
@@ -215,8 +236,8 @@ st.markdown("""
     }
     .stTabs [data-baseweb="tab-highlight"] { display: none; }
 
-    /* Botão Primário */
-    .stButton > button {
+    /* Botão Primário Formulários */
+    form button {
         width: 100%;
         background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
         color: #ffffff !important;
@@ -270,11 +291,11 @@ def init_db():
     c.execute("SELECT COUNT(*) FROM contas_bancarias")
     if c.fetchone()[0] == 0:
         bancos_dados = [
-            ("Nubank", "#a855f7", 1, 5000.00, 1840.50, 0.00, 0.00, 0.00, 10, 3),
-            ("Caixa Econômica", "#38bdf8", 1, 3500.00, 920.00, 1250.00, 2000.00, 350.00, 15, 8),
-            ("Mercado Pago", "#22d3ee", 1, 2800.00, 430.00, 12.50, 1500.00, 0.00, 5, 28),
-            ("Bradesco", "#f43f5e", 1, 4000.00, 780.00, -150.00, 1800.00, 500.00, 20, 13),
-            ("Inter", "#fb923c", 1, 6000.00, 610.00, 4210.10, 1000.00, 0.00, 25, 18)
+            ("Nubank", "#a855f7", 1, 5000.00, 1954.00, 0.00, 0.00, 0.00, 10, 3),
+            ("Caixa Econômica", "#38bdf8", 1, 3500.00, 0.00, 0.00, 2000.00, 0.00, 15, 8),
+            ("Mercado Pago", "#22d3ee", 1, 2800.00, 0.00, 0.00, 1500.00, 0.00, 5, 28),
+            ("Bradesco", "#f43f5e", 1, 4000.00, 0.00, 0.00, 1800.00, 0.00, 20, 13),
+            ("Inter", "#fb923c", 1, 6000.00, 0.00, 0.00, 1000.00, 0.00, 25, 18)
         ]
         c.executemany("""
             INSERT INTO contas_bancarias 
@@ -282,16 +303,13 @@ def init_db():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, bancos_dados)
     
-    # Transações de exemplo para alimentar os gráficos de imediato
     c.execute("SELECT COUNT(*) FROM transacoes")
     if c.fetchone()[0] == 0:
         tx_exemplo = [
-            ("10/11 14:20", "Supermercado Dia", 185.40, "Alimentação", "Saída", "Nubank", "Cartão de Crédito"),
-            ("10/11 11:10", "Posto Shell Gasolina", 120.00, "Transporte", "Saída", "Inter", "Conta Corrente / Pix"),
-            ("09/11 20:30", "iFood Lanche", 64.90, "Alimentação", "Saída", "Mercado Pago", "Cartão de Crédito"),
-            ("08/11 10:00", "Farmácia Droga Raia", 89.20, "Saúde", "Saída", "Caixa Econômica", "Cartão de Crédito"),
-            ("05/11 18:00", "Assinatura Netflix / Spotify", 55.90, "Contas Fixas", "Saída", "Nubank", "Cartão de Crédito"),
-            ("01/11 08:00", "Transferência Salário", 3500.00, "Renda", "Entrada", "Inter", "Conta Corrente / Pix"),
+            ("10/11 14:20", "Supermercado", 185.40, "Alimentação", "Saída", "Nubank", "Cartão de Crédito"),
+            ("10/11 11:10", "Combustível", 120.00, "Transporte", "Saída", "Nubank", "Cartão de Crédito"),
+            ("09/11 20:30", "Lanche", 64.90, "Alimentação", "Saída", "Nubank", "Cartão de Crédito"),
+            ("08/11 10:00", "Farmácia", 89.20, "Saúde", "Saída", "Nubank", "Cartão de Crédito"),
         ]
         c.executemany("""
             INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
@@ -374,9 +392,8 @@ total_cheque = df_bancos["cheque_especial_usado"].sum()
 
 msg_total, classe_total = get_status_saldo(total_saldos)
 
-# Controle de estado para os cliques nos botões
 if "bloco_ativo" not in st.session_state:
-    st.session_state.bloco_ativo = None
+    st.session_state.bloco_ativo = "vencimentos"
 
 # Barra Superior
 st.markdown("""
@@ -405,31 +422,27 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# BLOCOS DE AÇÕES ÚTEIS E INTERATIVOS
+# BLOCOS DE RECURSOS RÁPIDOS
 st.markdown('<div class="sec-header">Recursos Rápidos</div>', unsafe_allow_html=True)
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    btn_venc = st.button("💳\\nVencimentos", key="btn_venc", help="Configurar datas de vencimento das faturas")
-    if btn_venc:
+    if st.button("💳 Venc.", key="btn_venc", help="Configurar datas de vencimento das faturas"):
         st.session_state.bloco_ativo = "vencimentos" if st.session_state.bloco_ativo != "vencimentos" else None
 
 with col2:
-    btn_graf = st.button("📊\\nGráficos", key="btn_graf", help="Abrir gráficos dinâmicos de gastos")
-    if btn_graf:
+    if st.button("📊 Gráficos", key="btn_graf", help="Abrir gráficos dinâmicos de gastos"):
         st.session_state.bloco_ativo = "graficos" if st.session_state.bloco_ativo != "graficos" else None
 
 with col3:
-    btn_ext = st.button("📑\\nExtrato", key="btn_ext", help="Consultar histórico detalhado com recibo")
-    if btn_ext:
+    if st.button("📑 Extrato", key="btn_ext", help="Consultar histórico recente com comprovantes"):
         st.session_state.bloco_ativo = "extrato" if st.session_state.bloco_ativo != "extrato" else None
 
 with col4:
-    btn_lim = st.button("⚖️\\nLimites", key="btn_lim", help="Visualizar cheque especial e limites disponíveis")
-    if btn_lim:
+    if st.button("⚖️ Limites", key="btn_lim", help="Visualizar cheque especial e limites disponíveis"):
         st.session_state.bloco_ativo = "limites" if st.session_state.bloco_ativo != "limites" else None
 
-# ÁREA DINÂMICA AO CLICAR NOS BLOCOS
+# ÁREA DINÂMICA
 if st.session_state.bloco_ativo == "vencimentos":
     st.markdown("""
     <div class="panel-box">
@@ -450,7 +463,7 @@ if st.session_state.bloco_ativo == "vencimentos":
         
     if st.button("💾 Salvar Datas deste Cartão", key="salvar_datas"):
         atualizar_vencimentos(banco_venc, dia_venc, dia_fech)
-        st.success(f"Datas de {banco_venc} atualizadas: Fechamento dia {dia_fech} • Vencimento dia {dia_venc}!")
+        st.success(f"Datas de {banco_venc} salvas: Fechamento dia {dia_fech} • Vencimento dia {dia_venc}!")
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
