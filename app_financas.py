@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
+import requests
 from datetime import datetime
 
 st.set_page_config(page_title="Finanças Pro", page_icon="⚡", layout="centered")
@@ -26,7 +27,6 @@ st.markdown("""
         padding-bottom: 3rem !important;
     }
 
-    /* Ocultar barra superior nativa e rodapés do Streamlit */
     #MainMenu, footer, header { visibility: hidden; }
 
     /* Topo / Header Futurista */
@@ -125,19 +125,14 @@ st.markdown("""
         border-top: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    /* Cards dos Bancos - Cyber Fintech */
-    .sec-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin: 1.2rem 0 0.7rem 0;
-    }
+    /* Cards dos Bancos */
     .sec-title { 
         font-size: 0.72rem; 
         font-weight: 800; 
         color: #64748b; 
         text-transform: uppercase; 
         letter-spacing: 1.2px; 
+        margin: 1.2rem 0 0.7rem 0;
     }
     
     .bank-card {
@@ -189,7 +184,7 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
 
-    /* Grid Interno dos Cartões e Contas */
+    /* Grid Interno dos Valores */
     .metric-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -232,13 +227,12 @@ st.markdown("""
         margin-top: 2px;
     }
 
-    /* Cores Neons Específicas */
     .color-fatura { color: #22d3ee; }
     .color-saldo { color: #34d399; }
     .color-alerta { color: #f59e0b; }
     .color-perigo { color: #f87171; }
 
-    /* Estilização Moderna das Abas nativas do Streamlit */
+    /* Abas Estilizadas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
         background-color: rgba(15, 23, 42, 0.6);
@@ -264,7 +258,7 @@ st.markdown("""
     }
     .stTabs [data-baseweb="tab-highlight"] { display: none; }
 
-    /* Estilização Futurista dos Botões de Ação */
+    /* Botão com Gradiente Neomórfico */
     .stButton > button {
         width: 100%;
         background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%) !important;
@@ -309,6 +303,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ----------------- BASE DE DADOS -----------------
 def init_db():
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
@@ -322,7 +317,6 @@ def init_db():
             tipo TEXT
         )
     """)
-    # Migração retroativa de colunas
     c.execute("PRAGMA table_info(transacoes)")
     colunas = [col[1] for col in c.fetchall()]
     if "banco" not in colunas:
@@ -400,6 +394,71 @@ def adicionar_transacao(data, desc, valor, cat, banco, meio, tipo):
     conn.commit()
     conn.close()
 
+# ----------------- INTEGRAÇÃO PLUGGY (OPEN FINANCE) -----------------
+def obter_token_pluggy():
+    client_id = st.secrets.get("PLUGGY_CLIENT_ID")
+    client_secret = st.secrets.get("PLUGGY_CLIENT_SECRET")
+    
+    if not client_id or not client_secret:
+        return None
+        
+    try:
+        url = "https://api.pluggy.ai/auth"
+        payload = {"clientId": client_id, "clientSecret": client_secret}
+        res = requests.post(url, json=payload, timeout=10)
+        if res.status_code == 200:
+            return res.json().get("apiKey")
+    except Exception:
+        pass
+    return None
+
+def criar_connect_token_pluggy(api_key):
+    try:
+        url = "https://api.pluggy.ai/connect_token"
+        headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
+        res = requests.post(url, json={}, headers=headers, timeout=10)
+        if res.status_code in [200, 201]:
+            return res.json().get("accessToken")
+    except Exception:
+        pass
+    return None
+
+def sincronizar_dados_bancarios(api_key):
+    headers = {"X-API-KEY": api_key}
+    
+    # Busca contas conectadas
+    try:
+        res_contas = requests.get("https://api.pluggy.ai/accounts", headers=headers, timeout=12)
+        if res_contas.status_code == 200:
+            items = res_contas.json().get("results", [])
+            conn = sqlite3.connect("financas.db")
+            c = conn.cursor()
+            for it in items:
+                banco_raw = (it.get("name") or "").lower()
+                saldo = float(it.get("balance", 0.0))
+                overdraft = float(it.get("overdraftLimit", 0.0) or 0.0)
+                
+                # Mapeia para os bancos do sistema
+                banco_alvo = None
+                if "nu" in banco_raw: banco_alvo = "Nubank"
+                elif "caixa" in banco_raw: banco_alvo = "Caixa Econômica"
+                elif "mercado" in banco_raw: banco_alvo = "Mercado Pago"
+                elif "bradesco" in banco_raw: banco_alvo = "Bradesco"
+                elif "inter" in banco_raw: banco_alvo = "Inter"
+                
+                if banco_alvo:
+                    c.execute("""
+                        UPDATE contas_bancarias 
+                        SET saldo_conta = ?, limite_cheque_especial = ?
+                        WHERE banco = ?
+                    """, (saldo, overdraft, banco_alvo))
+            conn.commit()
+            conn.close()
+            return True, len(items)
+    except Exception as e:
+        return False, str(e)
+    return False, "Nenhuma conta retornada."
+
 df_bancos = get_contas()
 df_tx = get_transacoes()
 
@@ -434,8 +493,9 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # Abas Navegação Futuristas
-tab_bancos, tab_extrato, tab_novo, tab_ajustes = st.tabs([
+tab_bancos, tab_sync, tab_extrato, tab_novo, tab_ajustes = st.tabs([
     "Bancos", 
+    "Open Finance",
     "Extrato", 
     "Novo Gasto", 
     "Ajustes"
@@ -478,6 +538,37 @@ with tab_bancos:
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+with tab_sync:
+    st.markdown('<div class="sec-title">Sincronização Bancária Pluggy</div>', unsafe_allow_html=True)
+    
+    api_key = obter_token_pluggy()
+    
+    if not api_key:
+        st.error("Credenciais da Pluggy não encontradas nos Secrets ou inválidas. Verifique o painel do Streamlit Cloud.")
+    else:
+        st.success("Conexão autenticada com o Open Finance Pluggy.")
+        
+        # 1. Botão para conectar novas contas
+        connect_token = criar_connect_token_pluggy(api_key)
+        if connect_token:
+            widget_url = f"https://connect.pluggy.ai?connectToken={connect_token}"
+            st.markdown(f"""
+            <a href="{widget_url}" target="_blank" style="text-decoration: none;">
+                <div style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(8, 51, 68, 0.6) 100%); border: 1px solid rgba(34, 211, 238, 0.4); padding: 12px; border-radius: 14px; text-align: center; color: #22d3ee; font-weight: 700; font-size: 0.85rem; margin-bottom: 12px;">
+                    🔗 Conectar Banco (Nubank, Caixa, Inter...)
+                </div>
+            </a>
+            """, unsafe_allow_html=True)
+        
+        # 2. Botão para sincronizar saldos
+        if st.button("🔄 Puxar Saldos e Atualizar App"):
+            ok, msg = sincronizar_dados_bancarios(api_key)
+            if ok:
+                st.success(f"{msg} contas sincronizadas com sucesso!")
+                st.rerun()
+            else:
+                st.warning(f"Status da sincronização: {msg}")
 
 with tab_extrato:
     st.markdown('<div class="sec-title">Últimos Movimentos</div>', unsafe_allow_html=True)
