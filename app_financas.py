@@ -406,7 +406,7 @@ def obter_token_pluggy():
         url = "https://api.pluggy.ai/auth"
         payload = {"clientId": client_id, "clientSecret": client_secret}
         res = requests.post(url, json=payload, timeout=10)
-        if res.status_code == 200:
+        if res.status_code in [200, 201]:
             return res.json().get("apiKey")
     except Exception:
         pass
@@ -425,8 +425,6 @@ def criar_connect_token_pluggy(api_key):
 
 def sincronizar_dados_bancarios(api_key):
     headers = {"X-API-KEY": api_key}
-    
-    # Busca contas conectadas
     try:
         res_contas = requests.get("https://api.pluggy.ai/accounts", headers=headers, timeout=12)
         if res_contas.status_code == 200:
@@ -438,7 +436,6 @@ def sincronizar_dados_bancarios(api_key):
                 saldo = float(it.get("balance", 0.0))
                 overdraft = float(it.get("overdraftLimit", 0.0) or 0.0)
                 
-                # Mapeia para os bancos do sistema
                 banco_alvo = None
                 if "nu" in banco_raw: banco_alvo = "Nubank"
                 elif "caixa" in banco_raw: banco_alvo = "Caixa Econômica"
@@ -492,7 +489,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Abas Navegação Futuristas
+# Abas de Navegação
 tab_bancos, tab_sync, tab_extrato, tab_novo, tab_ajustes = st.tabs([
     "Bancos", 
     "Open Finance",
@@ -549,19 +546,22 @@ with tab_sync:
     else:
         st.success("Conexão autenticada com o Open Finance Pluggy.")
         
-        # 1. Botão para conectar novas contas
         connect_token = criar_connect_token_pluggy(api_key)
         if connect_token:
-            widget_url = f"https://connect.pluggy.ai?connectToken={connect_token}"
+            # URL corrigida com parâmetro connect_token
+            widget_url = f"https://connect.pluggy.ai/?connect_token={connect_token}"
+            
             st.markdown(f"""
             <a href="{widget_url}" target="_blank" style="text-decoration: none;">
-                <div style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(8, 51, 68, 0.6) 100%); border: 1px solid rgba(34, 211, 238, 0.4); padding: 12px; border-radius: 14px; text-align: center; color: #22d3ee; font-weight: 700; font-size: 0.85rem; margin-bottom: 12px;">
-                    🔗 Conectar Banco (Nubank, Caixa, Inter...)
+                <div style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(8, 51, 68, 0.6) 100%); border: 1px solid rgba(34, 211, 238, 0.4); padding: 14px; border-radius: 14px; text-align: center; color: #22d3ee; font-weight: 700; font-size: 0.9rem; margin-bottom: 14px;">
+                    🔗 Conectar Novo Banco (Nubank, Caixa, Inter...)
                 </div>
             </a>
             """, unsafe_allow_html=True)
+            st.caption("Ao tocar no botão acima, autentique a conta pretendida no portal seguro da Pluggy.")
+        else:
+            st.warning("Não foi possível gerar o token temporário da Pluggy. Verifique se o plano developer está ativo no painel.")
         
-        # 2. Botão para sincronizar saldos
         if st.button("🔄 Puxar Saldos e Atualizar App"):
             ok, msg = sincronizar_dados_bancarios(api_key)
             if ok:
