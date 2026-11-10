@@ -1,12 +1,11 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-import requests
 from datetime import datetime
 
 st.set_page_config(page_title="Minhas Finanças", page_icon="⚡", layout="centered")
 
-# Estilo Moderno inspirado na estética modular e limpa do MacroDroid (Dark Card UI / Bento Grid)
+# Estilo Moderno inspirado em Dark Bento UI / MacroDroid
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
@@ -16,9 +15,8 @@ st.markdown("""
         box-sizing: border-box;
     }
     
-    /* Fundo escuro fosco e suave */
     .stApp { 
-        background: #0f131a !important; 
+        background: #0b0f17 !important; 
         color: #f1f5f9; 
     }
     
@@ -30,7 +28,7 @@ st.markdown("""
 
     #MainMenu, footer, header { visibility: hidden; }
 
-    /* Barra Superior / Header */
+    /* Barra Superior */
     .md-header {
         display: flex;
         justify-content: space-between;
@@ -54,10 +52,10 @@ st.markdown("""
         display: flex;
         align-items: center;
         gap: 6px;
-        background: #1e293b;
+        background: #162032;
         color: #38bdf8;
-        border: 1px solid #334155;
-        padding: 6px 12px;
+        border: 1px solid #223249;
+        padding: 5px 12px;
         border-radius: 9999px;
         font-size: 0.7rem;
         font-weight: 700;
@@ -70,15 +68,14 @@ st.markdown("""
         box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
     }
 
-    /* Card Master Bento Style */
+    /* Card Master */
     .md-hero-card {
-        background: linear-gradient(145deg, #1e293b 0%, #151d2a 100%);
-        border: 1px solid #334155;
+        background: linear-gradient(145deg, #182335 0%, #101826 100%);
+        border: 1px solid #24354f;
         border-radius: 22px;
         padding: 1.3rem;
         margin-bottom: 1.2rem;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
-        position: relative;
+        box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.4);
     }
     .md-hero-label {
         font-size: 0.68rem;
@@ -112,52 +109,12 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         padding-top: 10px;
-        border-top: 1px solid #27354a;
+        border-top: 1px solid #202e44;
         font-size: 0.75rem;
         color: #94a3b8;
     }
 
-    /* Grid de Blocos Estilo MacroDroid Tiles */
-    .tile-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 8px;
-        margin-bottom: 1.4rem;
-    }
-    .md-tile {
-        background: #182232;
-        border: 1px solid #27364b;
-        border-radius: 16px;
-        padding: 12px 6px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-        gap: 6px;
-        transition: transform 0.15s ease;
-    }
-    .md-tile-icon {
-        width: 38px;
-        height: 38px;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.1rem;
-    }
-    .icon-blue { background: #0369a1; color: #38bdf8; }
-    .icon-orange { background: #9a3412; color: #fdba74; }
-    .icon-emerald { background: #065f46; color: #6ee7b7; }
-    .icon-purple { background: #6b21a8; color: #d8b4fe; }
-    
-    .md-tile-text {
-        font-size: 0.66rem;
-        font-weight: 700;
-        color: #e2e8f0;
-    }
-
-    /* Lista de Instituições / Bancos */
+    /* Bancos / Cards */
     .sec-header {
         font-size: 0.75rem;
         font-weight: 800;
@@ -167,12 +124,11 @@ st.markdown("""
         margin: 1.2rem 0 0.8rem 0;
     }
     .bank-card {
-        background: #151d2a;
-        border: 1px solid #243247;
+        background: #121a28;
+        border: 1px solid #1f2d42;
         border-radius: 18px;
         padding: 14px;
         margin-bottom: 10px;
-        position: relative;
     }
     .bank-card-top {
         display: flex;
@@ -200,15 +156,15 @@ st.markdown("""
         gap: 8px;
     }
     .bank-stat {
-        background: #0f1622;
-        border: 1px solid #1e2c3f;
+        background: #0c121c;
+        border: 1px solid #182436;
         border-radius: 12px;
         padding: 10px;
     }
     .bank-stat-full {
         grid-column: span 2;
-        background: #0f1622;
-        border: 1px solid #1e2c3f;
+        background: #0c121c;
+        border: 1px solid #182436;
         border-radius: 12px;
         padding: 10px;
     }
@@ -225,19 +181,23 @@ st.markdown("""
         color: #ffffff;
         margin-top: 3px;
     }
-    .bank-msg {
-        font-size: 0.65rem;
-        font-weight: 600;
-        margin-top: 3px;
+
+    /* Modal / Painel Expansível */
+    .panel-box {
+        background: #141e2e;
+        border: 1px solid #23354f;
+        border-radius: 18px;
+        padding: 16px;
+        margin-bottom: 1.4rem;
     }
 
     /* Abas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
-        background-color: #151d2a;
+        background-color: #121a28;
         padding: 6px;
         border-radius: 16px;
-        border: 1px solid #243247;
+        border: 1px solid #1f2d42;
     }
     .stTabs [data-baseweb="tab"] {
         height: 36px;
@@ -250,7 +210,7 @@ st.markdown("""
         padding: 0 10px;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #243247 !important;
+        background-color: #1f2d42 !important;
         color: #38bdf8 !important;
     }
     .stTabs [data-baseweb="tab-highlight"] { display: none; }
@@ -265,7 +225,6 @@ st.markdown("""
         font-weight: 800 !important;
         font-size: 0.86rem !important;
         padding: 0.7rem 1rem !important;
-        box-shadow: 0 4px 15px rgba(2, 132, 199, 0.3) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -296,23 +255,49 @@ def init_db():
             fatura_atual REAL,
             saldo_conta REAL,
             limite_cheque_especial REAL,
-            cheque_especial_usado REAL
+            cheque_especial_usado REAL,
+            dia_vencimento INTEGER DEFAULT 10,
+            dia_fechamento INTEGER DEFAULT 3
         )
     """)
+    c.execute("PRAGMA table_info(contas_bancarias)")
+    cols = [col[1] for col in c.fetchall()]
+    if "dia_vencimento" not in cols:
+        c.execute("ALTER TABLE contas_bancarias ADD COLUMN dia_vencimento INTEGER DEFAULT 10")
+    if "dia_fechamento" not in cols:
+        c.execute("ALTER TABLE contas_bancarias ADD COLUMN dia_fechamento INTEGER DEFAULT 3")
+
     c.execute("SELECT COUNT(*) FROM contas_bancarias")
     if c.fetchone()[0] == 0:
         bancos_dados = [
-            ("Nubank", "#a855f7", 1, 5000.00, 1840.50, 0.00, 0.00, 0.00),
-            ("Caixa Econômica", "#38bdf8", 1, 3500.00, 920.00, 1250.00, 2000.00, 350.00),
-            ("Mercado Pago", "#22d3ee", 1, 2800.00, 430.00, 12.50, 1500.00, 0.00),
-            ("Bradesco", "#f43f5e", 1, 4000.00, 780.00, -150.00, 1800.00, 500.00),
-            ("Inter", "#fb923c", 1, 6000.00, 610.00, 4210.10, 1000.00, 0.00)
+            ("Nubank", "#a855f7", 1, 5000.00, 1840.50, 0.00, 0.00, 0.00, 10, 3),
+            ("Caixa Econômica", "#38bdf8", 1, 3500.00, 920.00, 1250.00, 2000.00, 350.00, 15, 8),
+            ("Mercado Pago", "#22d3ee", 1, 2800.00, 430.00, 12.50, 1500.00, 0.00, 5, 28),
+            ("Bradesco", "#f43f5e", 1, 4000.00, 780.00, -150.00, 1800.00, 500.00, 20, 13),
+            ("Inter", "#fb923c", 1, 6000.00, 610.00, 4210.10, 1000.00, 0.00, 25, 18)
         ]
         c.executemany("""
             INSERT INTO contas_bancarias 
-            (banco, cor_identificador, tem_cartao, limite_cartao, fatura_atual, saldo_conta, limite_cheque_especial, cheque_especial_usado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (banco, cor_identificador, tem_cartao, limite_cartao, fatura_atual, saldo_conta, limite_cheque_especial, cheque_especial_usado, dia_vencimento, dia_fechamento)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, bancos_dados)
+    
+    # Transações de exemplo para alimentar os gráficos de imediato
+    c.execute("SELECT COUNT(*) FROM transacoes")
+    if c.fetchone()[0] == 0:
+        tx_exemplo = [
+            ("10/11 14:20", "Supermercado Dia", 185.40, "Alimentação", "Saída", "Nubank", "Cartão de Crédito"),
+            ("10/11 11:10", "Posto Shell Gasolina", 120.00, "Transporte", "Saída", "Inter", "Conta Corrente / Pix"),
+            ("09/11 20:30", "iFood Lanche", 64.90, "Alimentação", "Saída", "Mercado Pago", "Cartão de Crédito"),
+            ("08/11 10:00", "Farmácia Droga Raia", 89.20, "Saúde", "Saída", "Caixa Econômica", "Cartão de Crédito"),
+            ("05/11 18:00", "Assinatura Netflix / Spotify", 55.90, "Contas Fixas", "Saída", "Nubank", "Cartão de Crédito"),
+            ("01/11 08:00", "Transferência Salário", 3500.00, "Renda", "Entrada", "Inter", "Conta Corrente / Pix"),
+        ]
+        c.executemany("""
+            INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, tx_exemplo)
+    
     conn.commit()
     conn.close()
 
@@ -330,14 +315,25 @@ def get_transacoes():
     conn.close()
     return df
 
-def atualizar_banco(banco, fatura, lim_cartao, saldo, lim_cheque, cheque_usado):
+def atualizar_banco(banco, fatura, lim_cartao, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech):
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("""
         UPDATE contas_bancarias 
-        SET fatura_atual = ?, limite_cartao = ?, saldo_conta = ?, limite_cheque_especial = ?, cheque_especial_usado = ?
+        SET fatura_atual = ?, limite_cartao = ?, saldo_conta = ?, limite_cheque_especial = ?, cheque_especial_usado = ?, dia_vencimento = ?, dia_fechamento = ?
         WHERE banco = ?
-    """, (fatura, lim_cartao, saldo, lim_cheque, cheque_usado, banco))
+    """, (fatura, lim_cartao, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech, banco))
+    conn.commit()
+    conn.close()
+
+def atualizar_vencimentos(banco, dia_venc, dia_fech):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("""
+        UPDATE contas_bancarias 
+        SET dia_vencimento = ?, dia_fechamento = ?
+        WHERE banco = ?
+    """, (dia_venc, dia_fech, banco))
     conn.commit()
     conn.close()
 
@@ -355,7 +351,6 @@ def adicionar_transacao(data, desc, valor, cat, banco, meio, tipo):
     conn.commit()
     conn.close()
 
-# Função de Mensagens Personalizadas de Saldo
 def get_status_saldo(saldo):
     if saldo < 0:
         return "🚨 No vermelho (Socorro!)", "msg-danger"
@@ -378,6 +373,10 @@ total_saldos = df_bancos["saldo_conta"].sum()
 total_cheque = df_bancos["cheque_especial_usado"].sum()
 
 msg_total, classe_total = get_status_saldo(total_saldos)
+
+# Controle de estado para os cliques nos botões
+if "bloco_ativo" not in st.session_state:
+    st.session_state.bloco_ativo = None
 
 # Barra Superior
 st.markdown("""
@@ -406,32 +405,131 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Grid de Ações / Blocos Estilo MacroDroid
-st.markdown("""
-<div class="tile-grid">
-    <div class="md-tile">
-        <div class="md-tile-icon icon-blue">💳</div>
-        <span class="md-tile-text">Cartões</span>
-    </div>
-    <div class="md-tile">
-        <div class="md-tile-icon icon-orange">🔄</div>
-        <span class="md-tile-text">Pix</span>
-    </div>
-    <div class="md-tile">
-        <div class="md-tile-icon icon-emerald">📊</div>
-        <span class="md-tile-text">Gráficos</span>
-    </div>
-    <div class="md-tile">
-        <div class="md-tile-icon icon-purple">⚡</div>
-        <span class="md-tile-text">Extrato</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# BLOCOS DE AÇÕES ÚTEIS E INTERATIVOS
+st.markdown('<div class="sec-header">Recursos Rápidos</div>', unsafe_allow_html=True)
+col1, col2, col3, col4 = st.columns(4)
 
-# Navegação por Abas
+with col1:
+    btn_venc = st.button("💳\\nVencimentos", key="btn_venc", help="Configurar datas de vencimento das faturas")
+    if btn_venc:
+        st.session_state.bloco_ativo = "vencimentos" if st.session_state.bloco_ativo != "vencimentos" else None
+
+with col2:
+    btn_graf = st.button("📊\\nGráficos", key="btn_graf", help="Abrir gráficos dinâmicos de gastos")
+    if btn_graf:
+        st.session_state.bloco_ativo = "graficos" if st.session_state.bloco_ativo != "graficos" else None
+
+with col3:
+    btn_ext = st.button("📑\\nExtrato", key="btn_ext", help="Consultar histórico detalhado com recibo")
+    if btn_ext:
+        st.session_state.bloco_ativo = "extrato" if st.session_state.bloco_ativo != "extrato" else None
+
+with col4:
+    btn_lim = st.button("⚖️\\nLimites", key="btn_lim", help="Visualizar cheque especial e limites disponíveis")
+    if btn_lim:
+        st.session_state.bloco_ativo = "limites" if st.session_state.bloco_ativo != "limites" else None
+
+# ÁREA DINÂMICA AO CLICAR NOS BLOCOS
+if st.session_state.bloco_ativo == "vencimentos":
+    st.markdown("""
+    <div class="panel-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span style="font-weight: 800; color: #38bdf8; font-size: 0.9rem;">💳 Vencimento & Fechamento das Faturas</span>
+            <span style="font-size: 0.65rem; color: #94a3b8;">Configuração Rápida</span>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    banco_venc = st.selectbox("Selecione o Cartão para Configurar", df_bancos["banco"].tolist(), key="sel_banco_venc")
+    info_banco = df_bancos[df_bancos["banco"] == banco_venc].iloc[0]
+    
+    c_venc1, c_venc2 = st.columns(2)
+    with c_venc1:
+        dia_fech = st.number_input("Melhor dia de compra (Fechamento)", min_value=1, max_value=31, value=int(info_banco.get("dia_fechamento", 3)))
+    with c_venc2:
+        dia_venc = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=int(info_banco.get("dia_vencimento", 10)))
+        
+    if st.button("💾 Salvar Datas deste Cartão", key="salvar_datas"):
+        atualizar_vencimentos(banco_venc, dia_venc, dia_fech)
+        st.success(f"Datas de {banco_venc} atualizadas: Fechamento dia {dia_fech} • Vencimento dia {dia_venc}!")
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.bloco_ativo == "graficos":
+    st.markdown("""
+    <div class="panel-box">
+        <div style="font-weight: 800; color: #38bdf8; font-size: 0.9rem; margin-bottom: 10px;">
+            📊 Análise Dinâmica dos Seus Gastos
+        </div>
+    """, unsafe_allow_html=True)
+    
+    df_gastos = df_tx[df_tx["tipo"] == "Saída"]
+    
+    if df_gastos.empty:
+        st.info("Sem despesas cadastradas para compor os gráficos.")
+    else:
+        tipo_graf = st.radio("Visualizar Por:", ["Categoria", "Banco / Cartão"], horizontal=True)
+        
+        if tipo_graf == "Categoria":
+            cat_series = df_gastos.groupby("categoria")["valor"].sum()
+            st.caption("Total de gastos por categoria:")
+            st.bar_chart(cat_series)
+        else:
+            banco_series = df_gastos.groupby("banco")["valor"].sum()
+            st.caption("Distribuição de gastos por instituição:")
+            st.bar_chart(banco_series)
+            
+        st.markdown(f"**Total computado no gráfico:** R$ {df_gastos['valor'].sum():,.2f}")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.bloco_ativo == "extrato":
+    st.markdown("""
+    <div class="panel-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="font-weight: 800; color: #38bdf8; font-size: 0.9rem;">📑 Histórico Fiscal e Recibos</span>
+            <span style="font-size: 0.65rem; color: #64748b;">Fluxo Contínuo</span>
+        </div>
+    """, unsafe_allow_html=True)
+    if df_tx.empty:
+        st.info("Nenhuma movimentação registrada no extrato.")
+    else:
+        for _, row in df_tx.head(5).iterrows():
+            is_saida = row["tipo"] == "Saída"
+            sinal = "-" if is_saida else "+"
+            cor = "#f87171" if is_saida else "#4ade80"
+            st.markdown(f"""
+            <div style="background: #0d141e; border: 1px solid #1c2738; border-radius: 12px; padding: 10px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 0.82rem; font-weight: 700; color: #ffffff;">{row['descricao']}</div>
+                    <div style="font-size: 0.65rem; color: #64748b;">{row['data']} • {row['banco']} ({row['meio']})</div>
+                </div>
+                <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.88rem; color: {cor};">
+                    {sinal} R$ {row['valor']:,.2f}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.bloco_ativo == "limites":
+    st.markdown("""
+    <div class="panel-box">
+        <div style="font-weight: 800; color: #38bdf8; font-size: 0.9rem; margin-bottom: 10px;">
+            ⚖️ Diagnóstico de Limites & Cheque Especial
+        </div>
+    """, unsafe_allow_html=True)
+    total_lim_cartao = df_bancos["limite_cartao"].sum()
+    total_disp_cartao = max(0.0, total_lim_cartao - total_faturas)
+    
+    st.markdown(f"""
+    - **Limite Total de Crédito:** R$ {total_lim_cartao:,.2f}
+    - **Crédito Livre para Compras:** R$ {total_disp_cartao:,.2f}
+    - **Cheque Especial Utilizado:** <span style="color: {'#f87171' if total_cheque > 0 else '#4ade80'}; font-weight: 700;">R$ {total_cheque:,.2f}</span>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# Abas Principais
 tab_bancos, tab_extrato, tab_novo, tab_ajustes = st.tabs([
     "Bancos", 
-    "Extrato", 
+    "Extrato Completo", 
     "Lançar", 
     "Ajustes"
 ])
@@ -443,6 +541,8 @@ with tab_bancos:
         lim_disp = max(0.0, b["limite_cartao"] - b["fatura_atual"])
         b_saldo = b["saldo_conta"]
         msg_banco, cls_banco = get_status_saldo(b_saldo)
+        dia_v = int(b.get("dia_vencimento", 10))
+        dia_f = int(b.get("dia_fechamento", 3))
         
         st.markdown(f"""
         <div class="bank-card">
@@ -463,14 +563,20 @@ with tab_bancos:
                 <div class="bank-stat">
                     <div class="bank-stat-lbl">Fatura Cartão</div>
                     <div class="bank-stat-val" style="color: #38bdf8;">R$ {b['fatura_atual']:,.2f}</div>
-                    <div style="font-size: 0.62rem; color: #64748b; margin-top: 2px;">Disp: R$ {lim_disp:,.2f}</div>
+                    <div style="font-size: 0.62rem; color: #64748b; margin-top: 2px;">Vence dia {dia_v} (Fecha {dia_f})</div>
                 </div>
                 <div class="bank-stat-full">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span class="bank-stat-lbl">Cheque Especial Usado</span>
-                        <span style="font-family: 'JetBrains Mono'; font-size: 0.85rem; font-weight: 700; color: {'#f87171' if b['cheque_especial_usado'] > 0 else '#94a3b8'};">
-                            R$ {b['cheque_especial_usado']:,.2f}
-                        </span>
+                        <div>
+                            <span class="bank-stat-lbl">Limite Cartão Livre</span>
+                            <div style="font-size: 0.8rem; font-weight: 700; color: #ffffff;">R$ {lim_disp:,.2f}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <span class="bank-stat-lbl">Cheque Especial Usado</span>
+                            <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem; font-weight: 700; color: {'#f87171' if b['cheque_especial_usado'] > 0 else '#94a3b8'};">
+                                R$ {b['cheque_especial_usado']:,.2f}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -478,7 +584,7 @@ with tab_bancos:
         """, unsafe_allow_html=True)
 
 with tab_extrato:
-    st.markdown('<div class="sec-header">Movimentações Recentes</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-header">Histórico Geral de Lançamentos</div>', unsafe_allow_html=True)
     if df_tx.empty:
         st.info("Nenhuma transação registrada.")
     else:
@@ -487,10 +593,11 @@ with tab_extrato:
             sinal = "-" if is_saida else "+"
             cor = "#f87171" if is_saida else "#4ade80"
             st.markdown(f"""
-            <div style="background: #151d2a; border: 1px solid #243247; border-radius: 14px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="background: #121a28; border: 1px solid #1f2d42; border-radius: 14px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <div style="font-size: 0.85rem; font-weight: 700; color: #ffffff;">{row['descricao']}</div>
-                    <div style="font-size: 0.68rem; color: #64748b;">{row['data']} • {row['banco']}</div>
+                    <div style="font-size: 0.68rem; color: #64748b;">{row['data']} • {row['banco']} ({row['meio']})</div>
+                    <span style="font-size: 0.62rem; background: #1a2538; color: #38bdf8; padding: 2px 6px; border-radius: 4px;">{row['categoria']}</span>
                 </div>
                 <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.9rem; color: {cor};">
                     {sinal} R$ {row['valor']:,.2f}
@@ -499,13 +606,13 @@ with tab_extrato:
             """, unsafe_allow_html=True)
 
 with tab_novo:
-    st.markdown('<div class="sec-header">Nova Transação</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-header">Nova Transação Manual</div>', unsafe_allow_html=True)
     with st.form("form_novo_lanc"):
         desc = st.text_input("Descrição", value="Mercado / Compra")
         val = st.number_input("Valor (R$)", value=25.00, min_value=0.01, step=1.0)
         banco = st.selectbox("Banco", df_bancos["banco"].tolist())
         meio = st.radio("Método", ["Cartão de Crédito", "Conta Corrente / Pix"], horizontal=True)
-        cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Outros"])
+        cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Saúde", "Outros"])
         tipo = st.selectbox("Tipo", ["Saída", "Entrada"])
         
         if st.form_submit_button("Confirmar Lançamento"):
@@ -514,7 +621,7 @@ with tab_novo:
             st.rerun()
 
 with tab_ajustes:
-    st.markdown('<div class="sec-header">Ajuste de Valores Reais</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-header">Ajuste de Limites, Saldos & Datas</div>', unsafe_allow_html=True)
     banco_edit = st.selectbox("Selecione o Banco", df_bancos["banco"].tolist())
     row_banco = df_bancos[df_bancos["banco"] == banco_edit].iloc[0]
     
@@ -524,8 +631,10 @@ with tab_ajustes:
         novo_lim = st.number_input("Limite do Cartão (R$)", value=float(row_banco["limite_cartao"]), step=100.0)
         lim_ch = st.number_input("Limite Cheque Especial (R$)", value=float(row_banco["limite_cheque_especial"]), step=100.0)
         ch_usado = st.number_input("Cheque Especial Usado (R$)", value=float(row_banco["cheque_especial_usado"]), step=10.0)
+        dia_v = st.number_input("Dia do Vencimento da Fatura", min_value=1, max_value=31, value=int(row_banco.get("dia_vencimento", 10)))
+        dia_f = st.number_input("Dia de Fechamento da Fatura", min_value=1, max_value=31, value=int(row_banco.get("dia_fechamento", 3)))
         
-        if st.form_submit_button("Salvar Valores"):
-            atualizar_banco(banco_edit, nova_fat, novo_lim, novo_saldo, lim_ch, ch_usado)
-            st.success("Valores atualizados!")
+        if st.form_submit_button("Salvar Todos os Dados"):
+            atualizar_banco(banco_edit, nova_fat, novo_lim, novo_saldo, lim_ch, ch_usado, dia_v, dia_f)
+            st.success("Valores e vencimentos atualizados!")
             st.rerun()
