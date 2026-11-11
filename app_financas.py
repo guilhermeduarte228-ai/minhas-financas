@@ -5,6 +5,13 @@ import calendar
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 
+import io
+import urllib.parse
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+
 st.set_page_config(page_title="Minhas Finanças", page_icon="⚡", layout="centered")
 
 # Estilo Moderno Dark Bento UI / MacroDroid
@@ -746,6 +753,58 @@ def estornar_item_destino(id_item):
     conn.commit()
     conn.close()
 
+
+def gerar_relatorio_pdf(dados_bancos, entradas_m, saidas_m, saldo_proj, total_parc_m, total_rest_parc, diagnosticos_texto):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('RepTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, textColor=colors.HexColor('#0284c7'), spaceAfter=4)
+    sub_style = ParagraphStyle('RepSub', parent=styles['Normal'], fontName='Helvetica', fontSize=8, textColor=colors.HexColor('#64748b'), spaceAfter=10)
+    h2_style = ParagraphStyle('RepH2', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#0f172a'), spaceBefore=8, spaceAfter=4)
+    body_style = ParagraphStyle('RepBody', parent=styles['Normal'], fontName='Helvetica', fontSize=8.5, textColor=colors.HexColor('#334155'), leading=12)
+
+    elements = []
+    elements.append(Paragraph("RELATÓRIO FINANCEIRO CONSOLIDADO & SAÚDE", title_style))
+    elements.append(Paragraph(f"Gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')} • Balanço Geral do Mês Vigente", sub_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#38bdf8'), spaceAfter=10))
+    
+    tot_saldo = dados_bancos["saldo_conta"].sum()
+    tot_fat = dados_bancos[dados_bancos["tem_cartao"] == 1]["fatura_atual"].sum()
+    tot_chq = dados_bancos["cheque_especial_usado"].sum()
+    
+    tabela_resumo = [
+        ["SALDO ATUAL", "FATURAS TOTAIS", "CHEQUE USADO", "SALDO PROJETADO"],
+        [f"R$ {tot_saldo:,.2f}", f"R$ {tot_fat:,.2f}", f"R$ {tot_chq:,.2f}", f"R$ {saldo_proj:,.2f}"]
+    ]
+    t_kpi = Table(tabela_resumo, colWidths=[135, 135, 135, 135])
+    t_kpi.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0f172a')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 8),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('FONTNAME', (0,1), (-1,1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,1), (-1,1), 10),
+        ('TEXTCOLOR', (0,1), (0,1), colors.HexColor('#0284c7')),
+        ('TEXTCOLOR', (1,1), (1,1), colors.HexColor('#e11d48')),
+        ('TEXTCOLOR', (2,1), (2,1), colors.HexColor('#dc2626')),
+        ('TEXTCOLOR', (3,1), (3,1), colors.HexColor('#16a34a')),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
+    ]))
+    elements.append(t_kpi)
+    elements.append(Spacer(1, 10))
+
+    elements.append(Paragraph("DIRETRIZES PARA OTIMIZAÇÃO DA SUA SAÚDE FINANCEIRA:", h2_style))
+    for diag in diagnosticos_texto:
+        elements.append(Paragraph(f"• <b>{diag['titulo']}</b>: {diag['desc']}", body_style))
+        elements.append(Spacer(1, 4))
+        
+    doc.build(elements)
+    return buffer.getvalue()
+
 def get_status_saldo(saldo):
     if saldo < 0:
         return "🚨 No vermelho (Socorro!)", "msg-danger"
@@ -1445,29 +1504,141 @@ elif st.session_state.bloco_ativo == "graficos":
     st.markdown('<div class="panel-box">', unsafe_allow_html=True)
     c_tit, c_fech = st.columns([5, 1])
     with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.9rem;">📊 Análise Dinâmica dos Seus Gastos</span>', unsafe_allow_html=True)
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📊 Diagnóstico Inteligente & Saúde Financeira</span>', unsafe_allow_html=True)
     with c_fech:
-        if st.button("✕", key="fechar_graf"):
+        if st.button("✕", key="fechar_diag_inteligente"):
             st.session_state.bloco_ativo = None
             st.rerun()
+
+    tot_saldo = df_bancos["saldo_conta"].sum()
+    tot_faturas = df_bancos[df_bancos["tem_cartao"] == 1]["fatura_atual"].sum()
+    tot_cheque = df_bancos["cheque_especial_usado"].sum()
     
-    df_gastos = df_tx[df_tx["tipo"] == "Saída"]
+    entradas_prev_base = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() if not df_prev.empty else 0.0
+    entradas_reemb_total = df_reemb_itens["valor"].sum() if not df_reemb_itens.empty else 0.0
+    tot_entradas_mes = entradas_prev_base + entradas_reemb_total
     
-    if df_gastos.empty:
-        st.info("Sem despesas cadastradas para compor os gráficos.")
+    tot_saidas_mes = df_prev[df_prev["tipo"] == "Saída"]["valor"].sum() if not df_prev.empty else 0.0
+    saldo_projetado_mes = tot_saldo + tot_entradas_mes - tot_saidas_mes
+    
+    tot_parc_mes = df_parc["valor_parcela"].sum() if not df_parc.empty else 0.0
+    tot_restante_parc = sum((r["total_parcelas"] - r["parcela_atual"]) * r["valor_parcela"] for _, r in df_parc.iterrows()) if not df_parc.empty else 0.0
+
+    st.markdown(f'''
+    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 8px 0 12px 0;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #94a3b8; font-weight: 700;">SALDO TOTAL EM CONTA</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #ffffff;">R$ {tot_saldo:,.2f}</div>
+            </div>
+            <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #f87171; font-weight: 700;">FATURAS DE CARTÃO</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #f87171;">R$ {tot_faturas:,.2f}</div>
+            </div>
+            <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">ENTRADAS PREVISTAS</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #4ade80;">+ R$ {tot_entradas_mes:,.2f}</div>
+            </div>
+            <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 700;">SALDO PROJETADO FINAL</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: {'#4ade80' if saldo_projetado_mes >= 0 else '#f87171'};">
+                    R$ {saldo_projetado_mes:,.2f}
+                </div>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.66rem; color: #94a3b8; margin-top: 8px; padding-top: 6px; border-top: 1px solid #1c2a3d;">
+            <span>Cheque Especial em Uso: <strong style="color: {'#f87171' if tot_cheque > 0 else '#4ade80'};">R$ {tot_cheque:,.2f}</strong></span>
+            <span>Parcelas do Mês: <strong style="color: #fbbf24;">R$ {tot_parc_mes:,.2f}</strong></span>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    diagnosticos = []
+    if tot_cheque > 0:
+        diagnosticos.append({
+            "titulo": "Eliminação de Cheque Especial",
+            "tipo": "danger",
+            "desc": f"Existe um saldo emergencial em uso de R$ {tot_cheque:,.2f}. Os juros dessa modalidade estão entre os mais onerosos do sistema. Priorize a alocação de reembolsos KM diretamente para liquidar este saldo antes de qualquer gasto discricionário."
+        })
     else:
-        tipo_graf = st.radio("Visualizar Por:", ["Categoria", "Banco / Cartão"], horizontal=True)
+        diagnosticos.append({
+            "titulo": "Cheque Especial Preservado",
+            "tipo": "success",
+            "desc": "Nenhuma instituição financeira está cobrando juros emergenciais. Sua linha de crédito está 100% livre para eventuais incidentes."
+        })
         
-        if tipo_graf == "Categoria":
-            cat_series = df_gastos.groupby("categoria")["valor"].sum()
-            st.caption("Total de gastos por categoria:")
-            st.bar_chart(cat_series)
-        else:
-            banco_series = df_gastos.groupby("banco")["valor"].sum()
-            st.caption("Distribuição de gastos por instituição:")
-            st.bar_chart(banco_series)
-            
-        st.markdown(f"**Total computado no gráfico:** R$ {df_gastos['valor'].sum():,.2f}")
+    if tot_faturas > (tot_saldo + tot_entradas_mes):
+        deficit = tot_faturas - (tot_saldo + tot_entradas_mes)
+        diagnosticos.append({
+            "titulo": "Risco de Financiamento de Fatura",
+            "tipo": "danger",
+            "desc": f"O montante consolidado em faturas de cartão (R$ {tot_faturas:,.2f}) excede a sua capacidade líquida de pagamento em R$ {deficit:,.2f}. Evite novas compras no crédito e concentre os reembolsos pendentes para abatimento direto antes da data de fechamento."
+        })
+    else:
+        diagnosticos.append({
+            "titulo": "Cobertura Integral das Faturas",
+            "tipo": "success",
+            "desc": "A liquidez atual somada aos recebimentos previstos cobre com segurança a totalidade das obrigações de cartão."
+        })
+        
+    if tot_entradas_mes > 0:
+        pct_parc = (tot_parc_mes / tot_entradas_mes) * 100
+        if pct_parc > 35:
+            diagnosticos.append({
+                "titulo": "Comprometimento de Renda em Parcelas",
+                "tipo": "warning",
+                "desc": f"As compras parceladas somam R$ {tot_parc_mes:,.2f}, comprometendo {pct_parc:.1f}% da sua receita estimada no mês. Evite novos parcelamentos até a quitação dos planos vigentes (saldo devedor restante: R$ {tot_restante_parc:,.2f})."
+            })
+
+    st.markdown('<div style="font-size: 0.74rem; font-weight: 800; color: #ffffff; margin-bottom: 6px;">📋 O QUE VOCÊ DEVE FAZER:</div>', unsafe_allow_html=True)
+    for d in diagnosticos:
+        cor_borda = "#ef4444" if d["tipo"] == "danger" else ("#fbbf24" if d["tipo"] == "warning" else "#22c55e")
+        st.markdown(f'''
+        <div style="background: #0d1522; border-left: 4px solid {cor_borda}; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">{d['titulo']}</div>
+            <div style="font-size: 0.68rem; color: #94a3b8; line-height: 1.3; margin-top: 2px;">{d['desc']}</div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    st.markdown('<div style="font-size: 0.74rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">📤 EXPORTAR OU ENVIAR:</div>', unsafe_allow_html=True)
+
+    pdf_bytes = gerar_relatorio_pdf(df_bancos, tot_entradas_mes, tot_saidas_mes, saldo_projetado_mes, tot_parc_mes, tot_restante_parc, diagnosticos)
+    
+    texto_whatsapp = (
+        f"*RELATÓRIO FINANCEIRO & SAÚDE*\\n"
+        f"Data: {datetime.now().strftime('%d/%m/%Y às %H:%M')}\\n\\n"
+        f"• *Saldo em Conta:* R$ {tot_saldo:,.2f}\\n"
+        f"• *Faturas Totais:* R$ {tot_faturas:,.2f}\\n"
+        f"• *Cheque Especial em Uso:* R$ {tot_cheque:,.2f}\\n"
+        f"• *Entradas Previstas:* R$ {tot_entradas_mes:,.2f}\\n"
+        f"• *Saídas Previstas:* R$ {tot_saidas_mes:,.2f}\\n"
+        f"• *Saldo Projetado Final:* R$ {saldo_projetado_mes:,.2f}\\n"
+        f"• *Parcelas no Mês:* R$ {tot_parc_mes:,.2f} (Restante: R$ {tot_restante_parc:,.2f})\\n\\n"
+        f"*DIAGNÓSTICO E AÇÕES:*\\n"
+    )
+    for d in diagnosticos:
+        texto_whatsapp += f"- {d['titulo']}: {d['desc']}\\n"
+
+    url_whatsapp = "https://api.whatsapp.com/send?text=" + urllib.parse.quote(texto_whatsapp)
+
+    col_exp1, col_exp2 = st.columns(2)
+    with col_exp1:
+        st.download_button(
+            label="📄 Baixar Relatório (PDF)",
+            data=pdf_bytes,
+            file_name=f"relatorio_financeiro_{datetime.now().strftime('%Y_%m_%d')}.pdf",
+            mime="application/pdf",
+            key="btn_download_relatorio_pdf"
+        )
+    with col_exp2:
+        st.markdown(f'''
+        <a href="{url_whatsapp}" target="_blank" style="text-decoration: none;">
+            <button style="width: 100%; min-height: 38px; background: #25d366; color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.74rem; cursor: pointer;">
+                📲 Enviar p/ WhatsApp
+            </button>
+        </a>
+        ''', unsafe_allow_html=True)
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 # Abas Principais (Com aba 'Parcelas' ao lado de 'Bancos')
