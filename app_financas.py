@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
+import calendar
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 
@@ -11,14 +12,10 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
 
-    * { 
-        font-family: 'Plus Jakarta Sans', sans-serif !important; 
-        box-sizing: border-box;
-    }
-    
-    .stApp { 
-        background: #0b0f17 !important; 
-        color: #f1f5f9; 
+    html, body, .stApp {
+        background-color: #0b0f17 !important;
+        color: #f1f5f9;
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     
     .block-container { 
@@ -116,20 +113,23 @@ st.markdown("""
     }
 
     /* Botões de Recursos Rápidos */
-    .recursos-wrapper div[data-testid="column"] button {
+    .recursos-box {
+        margin-bottom: 1.2rem;
+    }
+    .recursos-box button {
         background: #141d2a !important;
         border: 1px solid #223247 !important;
         border-radius: 14px !important;
         color: #f1f5f9 !important;
-        font-size: 0.68rem !important;
+        font-size: 0.74rem !important;
         font-weight: 700 !important;
-        padding: 0.45rem 0.1rem !important;
-        min-height: 46px !important;
+        padding: 0.55rem 0.2rem !important;
+        min-height: 48px !important;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
         transition: all 0.2s ease !important;
-        white-space: nowrap !important;
+        width: 100% !important;
     }
-    .recursos-wrapper div[data-testid="column"] button:hover {
+    .recursos-box button:hover {
         border-color: #38bdf8 !important;
         color: #38bdf8 !important;
         transform: translateY(-1px) !important;
@@ -174,6 +174,11 @@ st.markdown("""
     .bank-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .bank-grid-single {
+        display: grid;
+        grid-template-columns: 1fr;
         gap: 8px;
     }
     .bank-stat {
@@ -289,6 +294,62 @@ st.markdown("""
         font-size: 0.86rem !important;
         padding: 0.7rem 1rem !important;
     }
+
+    /* Tabela do Calendário Visual */
+    .cal-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 4px;
+        margin-top: 8px;
+    }
+    .cal-th {
+        text-align: center;
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: #64748b;
+        padding: 4px 0;
+    }
+    .cal-cell {
+        background: #0d1522;
+        border: 1px solid #1a273b;
+        border-radius: 8px;
+        height: 48px;
+        vertical-align: top;
+        padding: 4px;
+        text-align: right;
+        font-size: 0.65rem;
+        font-weight: 600;
+        position: relative;
+    }
+    .cal-cell.today {
+        border-color: #38bdf8 !important;
+        box-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
+    }
+    .cal-cell.has-entrada {
+        background: rgba(34, 197, 94, 0.16) !important;
+        border-color: rgba(34, 197, 94, 0.65) !important;
+    }
+    .cal-cell.has-saida {
+        background: rgba(239, 68, 68, 0.16) !important;
+        border-color: rgba(239, 68, 68, 0.65) !important;
+    }
+    .cal-cell.has-ambos {
+        background: rgba(245, 158, 11, 0.16) !important;
+        border-color: rgba(245, 158, 11, 0.65) !important;
+    }
+    .cal-badge {
+        font-size: 0.54rem;
+        font-weight: 800;
+        font-family: 'JetBrains Mono', monospace;
+        display: block;
+        text-align: left;
+        margin-top: 2px;
+        border-radius: 3px;
+        padding: 1px 2px;
+        line-height: 1.1;
+    }
+    .badge-in { color: #4ade80; }
+    .badge-out { color: #f87171; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -333,12 +394,12 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             banco TEXT UNIQUE,
             cor_identificador TEXT,
-            tem_cartao INTEGER,
-            limite_cartao REAL,
-            fatura_atual REAL,
-            saldo_conta REAL,
-            limite_cheque_especial REAL,
-            cheque_especial_usado REAL,
+            tem_cartao INTEGER DEFAULT 1,
+            limite_cartao REAL DEFAULT 0,
+            fatura_atual REAL DEFAULT 0,
+            saldo_conta REAL DEFAULT 0,
+            limite_cheque_especial REAL DEFAULT 0,
+            cheque_especial_usado REAL DEFAULT 0,
             dia_vencimento INTEGER DEFAULT 10,
             dia_fechamento INTEGER DEFAULT 3
         )
@@ -350,7 +411,12 @@ def init_db():
         )
     """)
     
-    # Migrações seguras: Inter -> Itaú e Mercado Pago Amarelo
+    # Migrações seguras
+    c.execute("PRAGMA table_info(contas_bancarias)")
+    cols = [col[1] for col in c.fetchall()]
+    if "tem_cartao" not in cols:
+        c.execute("ALTER TABLE contas_bancarias ADD COLUMN tem_cartao INTEGER DEFAULT 1")
+
     c.execute("UPDATE contas_bancarias SET banco = 'Itaú', cor_identificador = '#ec7000' WHERE banco = 'Inter'")
     c.execute("UPDATE transacoes SET banco = 'Itaú' WHERE banco = 'Inter'")
     c.execute("UPDATE contas_bancarias SET cor_identificador = '#ffe600' WHERE banco = 'Mercado Pago'")
@@ -359,8 +425,8 @@ def init_db():
     if c.fetchone()[0] == 0:
         bancos_dados = [
             ("Nubank", "#a855f7", 1, 5000.00, 1954.00, 0.00, 0.00, 0.00, 10, 3),
-            ("Caixa Econômica", "#38bdf8", 1, 3500.00, 0.00, 0.00, 2000.00, 0.00, 15, 8),
-            ("Mercado Pago", "#ffe600", 1, 2800.00, 0.00, 0.00, 1500.00, 0.00, 5, 28),
+            ("Caixa Econômica", "#38bdf8", 0, 0.00, 0.00, 2000.00, 0.00, 0.00, 15, 8),
+            ("Mercado Pago", "#ffe600", 0, 0.00, 0.00, 1500.00, 0.00, 0.00, 5, 28),
             ("Bradesco", "#f43f5e", 1, 4000.00, 0.00, 0.00, 1800.00, 0.00, 20, 13),
             ("Itaú", "#ec7000", 1, 6000.00, 0.00, 0.00, 1000.00, 0.00, 25, 18)
         ]
@@ -454,14 +520,14 @@ def zerar_saldos_e_faturas():
     conn.commit()
     conn.close()
 
-def atualizar_banco(banco, fatura, lim_cartao, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech):
+def atualizar_banco_completo(banco, tem_cartao, fatura, lim_cartao, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech):
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("""
         UPDATE contas_bancarias 
-        SET fatura_atual = ?, limite_cartao = ?, saldo_conta = ?, limite_cheque_especial = ?, cheque_especial_usado = ?, dia_vencimento = ?, dia_fechamento = ?
+        SET tem_cartao = ?, fatura_atual = ?, limite_cartao = ?, saldo_conta = ?, limite_cheque_especial = ?, cheque_especial_usado = ?, dia_vencimento = ?, dia_fechamento = ?
         WHERE banco = ?
-    """, (fatura, lim_cartao, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech, banco))
+    """, (tem_cartao, fatura, lim_cartao, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech, banco))
     conn.commit()
     conn.close()
 
@@ -490,7 +556,6 @@ def adicionar_transacao(data, desc, valor, cat, banco, meio, tipo):
     conn.commit()
     conn.close()
 
-# Executa o rateio e abate direto do reembolso
 def aplicar_destinacao_reembolso(data_str, valor_total, lista_destinos):
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
@@ -556,23 +621,32 @@ df_tx = get_transacoes()
 df_prev = get_previstos()
 df_reemb_hist = get_historico_reembolsos()
 
-total_faturas = df_bancos["fatura_atual"].sum()
+total_faturas = df_bancos[df_bancos["tem_cartao"] == 1]["fatura_atual"].sum()
 total_saldos = df_bancos["saldo_conta"].sum()
 total_cheque = df_bancos["cheque_especial_usado"].sum()
 
 msg_total, classe_total = get_status_saldo(total_saldos)
 
 if "bloco_ativo" not in st.session_state:
-    st.session_state.bloco_ativo = "destinar_reembolso"
+    st.session_state.bloco_ativo = "previstos"
 
 if "mostrar_form_prev" not in st.session_state:
     st.session_state.mostrar_form_prev = False
+
+if "mostrar_calc_km" not in st.session_state:
+    st.session_state.mostrar_calc_km = False
 
 if "editando_id" not in st.session_state:
     st.session_state.editando_id = None
 
 if "copiando_prev" not in st.session_state:
     st.session_state.copiando_prev = None
+
+hoje = date.today()
+if "cal_mes" not in st.session_state:
+    st.session_state.cal_mes = hoje.month
+if "cal_ano" not in st.session_state:
+    st.session_state.cal_ano = hoje.year
 
 # Barra Superior
 st.markdown("""
@@ -595,160 +669,39 @@ st.markdown(f"""
     <div class="md-hero-val">R$ {total_saldos:,.2f}</div>
     <div class="md-msg-pill {classe_total}">{msg_total}</div>
     <div class="md-hero-footer">
-        <span>Faturas: <strong style="color: #ffffff;">R$ {total_faturas:,.2f}</strong></span>
+        <span>Faturas Cartão: <strong style="color: #ffffff;">R$ {total_faturas:,.2f}</strong></span>
         <span>Cheque Esp.: <strong style="color: #f87171;">R$ {total_cheque:,.2f}</strong></span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# RECURSOS RÁPIDOS
+# RECURSOS RÁPIDOS (2 linhas limpas sem truncar)
 st.markdown('<div class="sec-header">Recursos Rápidos</div>', unsafe_allow_html=True)
-st.markdown('<div class="recursos-wrapper">', unsafe_allow_html=True)
-col1, col2, col3, col4, col5 = st.columns(5)
-
-with col1:
-    if st.button("⛽ Destinar", key="btn_km"):
+st.markdown('<div class="recursos-box">', unsafe_allow_html=True)
+r_col1, r_col2 = st.columns(2)
+with r_col1:
+    if st.button("📅 Previsões & Calendário", key="btn_prev"):
+        st.session_state.bloco_ativo = "previstos" if st.session_state.bloco_ativo != "previstos" else None
+with r_col2:
+    if st.button("⛽ Destinar Reembolso", key="btn_km"):
         st.session_state.bloco_ativo = "destinar_reembolso" if st.session_state.bloco_ativo != "destinar_reembolso" else None
 
-with col2:
-    if st.button("📅 Previsões", key="btn_prev"):
-        st.session_state.bloco_ativo = "previstos" if st.session_state.bloco_ativo != "previstos" else None
-
-with col3:
+r_col3, r_col4, r_col5 = st.columns(3)
+with r_col3:
     if st.button("🧠 Advisor", key="btn_adv"):
         st.session_state.bloco_ativo = "advisor" if st.session_state.bloco_ativo != "advisor" else None
-
-with col4:
-    if st.button("💳 Venc.", key="btn_venc"):
+with r_col4:
+    if st.button("💳 Vencimentos", key="btn_venc"):
         st.session_state.bloco_ativo = "vencimentos" if st.session_state.bloco_ativo != "vencimentos" else None
-
-with col5:
+with r_col5:
     if st.button("📊 Gráficos", key="btn_graf"):
         st.session_state.bloco_ativo = "graficos" if st.session_state.bloco_ativo != "graficos" else None
 st.markdown('</div>', unsafe_allow_html=True)
 
 # ================= ÁREA DINÂMICA =================
-if st.session_state.bloco_ativo == "destinar_reembolso":
-    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-    c_tit, c_fech = st.columns([5, 1])
-    with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">⛽ Entrada & Destinação de Reembolso KM</span>', unsafe_allow_html=True)
-    with c_fech:
-        if st.button("✕", key="fechar_km"):
-            st.session_state.bloco_ativo = None
-            st.rerun()
-
-    st.markdown("""
-    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 10px 0 14px 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Como funciona o rateio de reembolso:</div>
-        <div style="font-size: 0.68rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;">
-            Recebeu o reembolso da empresa? Digite o valor total que caiu e <strong>distribua diretamente para onde o dinheiro deve ir</strong>. O app abate automaticamente a fatura do cartão usado no pedágio, repõe o cheque especial usado no combustível e deixa o lucro das diárias (R$ 100/dia) livre na conta!
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Calculadora auxiliar de estimativa
-    with st.expander("🧮 Calculadora de Estimativa (R$ 130/dia + Pedágios)", expanded=False):
-        c_c1, c_c2 = st.columns(2)
-        with c_c1:
-            dias_est = st.number_input("Dias de alocação", min_value=1, value=5, step=1)
-            pedagio_dia = st.number_input("Pedágio diário (Ida + Volta)", min_value=0.0, value=25.60, step=1.0)
-        with c_c2:
-            gasolina_est = dias_est * 30.0
-            diarias_lucro = dias_est * 100.0
-            pedagio_total_est = dias_est * pedagio_dia
-            total_est = (dias_est * 130.0) + pedagio_total_est
-            st.caption(f"⛽ Gasolina (R$ 30/dia): **R$ {gasolina_est:,.2f}**")
-            st.caption(f"💰 Lucro Livre (R$ 100/dia): **R$ {diarias_lucro:,.2f}**")
-            st.caption(f"🛣️ Pedágios Cartão: **R$ {pedagio_total_est:,.2f}**")
-            st.markdown(f"**Total Esperado:** <span style='color: #4ade80; font-weight: 800;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
-
-    with st.form("form_rateio_reembolso"):
-        st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #ffffff; margin-bottom: 8px;">1. Entrada Total de Reembolso Recebido:</div>', unsafe_allow_html=True)
-        c_v1, c_v2 = st.columns(2)
-        with c_v1:
-            data_receb = st.date_input("Data do Recebimento", value=date.today())
-        with c_v2:
-            valor_total_recebido = st.number_input("Valor Total que Caiu (R$)", min_value=0.01, value=778.00, step=20.0)
-
-        st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">2. Destinar o Valor para Abates e Saldo:</div>', unsafe_allow_html=True)
-        st.caption("Preencha onde cada fatia do dinheiro será aplicada (o valor é descontado imediatamente na conta/fatura selecionada):")
-
-        # Destino 1 (Ex: Pagar Pedágio no Cartão de Crédito)
-        st.markdown('<div style="background: #111a28; padding: 10px; border-radius: 12px; margin-bottom: 8px; border: 1px solid #1c2a3d;">', unsafe_allow_html=True)
-        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">🎯 Destino A (Ex: Pedágio no Cartão)</span>', unsafe_allow_html=True)
-        c_a1, c_a2, c_a3 = st.columns([1.5, 2.0, 1.5])
-        with c_a1:
-            banco_a = st.selectbox("Banco", df_bancos["banco"].tolist(), index=df_bancos["banco"].tolist().index("Nubank") if "Nubank" in df_bancos["banco"].tolist() else 0, key="b_a")
-        with c_a2:
-            acao_a = st.selectbox("Ação", ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], index=0, key="ac_a")
-        with c_a3:
-            val_a = st.number_input("Valor (R$)", min_value=0.0, value=128.00, step=10.0, key="v_a")
-        motivo_a = st.text_input("Motivo / Identificação", value="Pedágio da semana (Cartão)", key="m_a")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # Destino 2 (Ex: Repor Cheque Especial ou Gasolina)
-        st.markdown('<div style="background: #111a28; padding: 10px; border-radius: 12px; margin-bottom: 8px; border: 1px solid #1c2a3d;">', unsafe_allow_html=True)
-        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #fbbf24;">🎯 Destino B (Ex: Repor Gasolina / Cheque Especial)</span>', unsafe_allow_html=True)
-        c_b1, c_b2, c_b3 = st.columns([1.5, 2.0, 1.5])
-        with c_b1:
-            banco_b = st.selectbox("Banco", df_bancos["banco"].tolist(), index=df_bancos["banco"].tolist().index("Bradesco") if "Bradesco" in df_bancos["banco"].tolist() else 0, key="b_b")
-        with c_b2:
-            acao_b = st.selectbox("Ação", ["Abater Cheque Especial", "Pagar/Abater Fatura de Cartão", "Creditar em Conta Corrente"], index=0, key="ac_b")
-        with c_b3:
-            val_b = st.number_input("Valor (R$)", min_value=0.0, value=150.00, step=10.0, key="v_b")
-        motivo_b = st.text_input("Motivo / Identificação", value="Gasolina tirada do Cheque Especial", key="m_b")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # Destino 3 (Ex: Lucro Limpo / Renda Livre das Diárias)
-        sobra_lucro = max(0.0, valor_total_recebido - (val_a + val_b))
-        st.markdown('<div style="background: #111a28; padding: 10px; border-radius: 12px; margin-bottom: 8px; border: 1px solid #1c2a3d;">', unsafe_allow_html=True)
-        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #4ade80;">🎯 Destino C (Ex: Renda Livre / Diárias de R$ 100)</span>', unsafe_allow_html=True)
-        c_c1, c_c2, c_c3 = st.columns([1.5, 2.0, 1.5])
-        with c_c1:
-            banco_c = st.selectbox("Banco", df_bancos["banco"].tolist(), index=df_bancos["banco"].tolist().index("Itaú") if "Itaú" in df_bancos["banco"].tolist() else 0, key="b_c")
-        with c_c2:
-            acao_c = st.selectbox("Ação", ["Creditar em Conta Corrente", "Pagar/Abater Fatura de Cartão", "Abater Cheque Especial"], index=0, key="ac_c")
-        with c_c3:
-            val_c = st.number_input("Valor (R$)", min_value=0.0, value=float(sobra_lucro), step=10.0, key="v_c")
-        motivo_c = st.text_input("Motivo / Identificação", value="Renda livre das diárias", key="m_c")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        if st.form_submit_button("🚀 Executar Entrada & Destinar Automaticamente"):
-            destinos = [
-                {"banco": banco_a, "acao": acao_a, "valor": val_a, "motivo": motivo_a},
-                {"banco": banco_b, "acao": acao_b, "valor": val_b, "motivo": motivo_b},
-                {"banco": banco_c, "acao": acao_c, "valor": val_c, "motivo": motivo_c}
-            ]
-            aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), valor_total_recebido, destinos)
-            st.success("Reembolso distribuído com sucesso! Os valores foram abatidos e creditados nos bancos correspondentes.")
-            st.rerun()
-
-    # Histórico de Distribuições
-    if not df_reemb_hist.empty:
-        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Histórico de Reembolsos Destinados:</div>', unsafe_allow_html=True)
-        for _, row_h in df_reemb_hist.iterrows():
-            st.markdown(f"""
-            <div style="background: #0d1522; border: 1px solid #1a273b; border-radius: 12px; padding: 10px; margin-bottom: 6px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 0.8rem; font-weight: 700; color: #ffffff;">📅 {row_h['data']}</span>
-                    <span style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: #4ade80;">Total: R$ {row_h['valor_total']:,.2f}</span>
-                </div>
-                <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;">
-                    {row_h['detalhes']}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.bloco_ativo == "previstos":
-    entradas_previstas = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() if not df_prev.empty else 0.0
-    saidas_previstas = df_prev[df_prev["tipo"] == "Saída"]["valor"].sum() if not df_prev.empty else 0.0
-    saldo_projetado = total_saldos + entradas_previstas - saidas_previstas
-    
+if st.session_state.bloco_ativo == "previstos":
     st.markdown('<div class="panel-box">', unsafe_allow_html=True)
     
-    # Barra de controle do painel
     c_tit, c_limp, c_fech = st.columns([3, 2, 1])
     with c_tit:
         st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📅 Lançamentos Previstos</span>', unsafe_allow_html=True)
@@ -765,42 +718,142 @@ elif st.session_state.bloco_ativo == "previstos":
             st.session_state.bloco_ativo = None
             st.rerun()
 
-    # COMPARATIVO ATUAL VS PROJETADO
+    # Totais Previstos
+    entradas_previstas = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() if not df_prev.empty else 0.0
+    saidas_previstas = df_prev[df_prev["tipo"] == "Saída"]["valor"].sum() if not df_prev.empty else 0.0
+    saldo_projetado = total_saldos + entradas_previstas - saidas_previstas
+
+    # PAINEL DE SALDO PREVISTO A RECEBER E COMPARATIVO
     st.markdown(f"""
     <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 10px 0 14px 0;">
-        <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Comparativo: Atual vs. Projetado</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
-            <div style="background: #111a28; padding: 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #64748b; font-weight: 700;">SALDO ATUAL</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 1.05rem; font-weight: 800; color: #ffffff;">R$ {total_saldos:,.2f}</div>
+        <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Fluxo Futuro & Comparativo</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">PREVISTO A RECEBER</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #4ade80;">+ R$ {entradas_previstas:,.2f}</div>
             </div>
-            <div style="background: #111a28; padding: 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 700;">SALDO PROJETADO</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 1.05rem; font-weight: 800; color: {'#4ade80' if saldo_projetado >= 0 else '#f87171'};">
+            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #f87171; font-weight: 700;">PREVISTO A PAGAR</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #f87171;">- R$ {saidas_previstas:,.2f}</div>
+            </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #64748b; font-weight: 700;">SALDO ATUAL EM CONTA</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #ffffff;">R$ {total_saldos:,.2f}</div>
+            </div>
+            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 700;">SALDO PROJETADO FINAL</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: {'#4ade80' if saldo_projetado >= 0 else '#f87171'};">
                     R$ {saldo_projetado:,.2f}
                 </div>
             </div>
         </div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.68rem; color: #94a3b8; margin-top: 8px; padding-top: 8px; border-top: 1px solid #1c2a3d;">
-            <span>A Receber: <strong style="color: #4ade80;">+ R$ {entradas_previstas:,.2f}</strong></span>
-            <span>A Pagar: <strong style="color: #f87171;">- R$ {saidas_previstas:,.2f}</strong></span>
-        </div>
     </div>
     """, unsafe_allow_html=True)
+
+    # CALENDÁRIO VISUAL COM CORES NOS DIAS PREVISTOS
+    c_nav1, c_nav2 = st.columns([3, 2])
+    with c_nav1:
+        meses_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        st.markdown(f'<span style="font-size: 0.82rem; font-weight: 800; color: #ffffff;">🗓️ {meses_nomes[st.session_state.cal_mes - 1]} de {st.session_state.cal_ano}</span>', unsafe_allow_html=True)
+    with c_nav2:
+        c_prev_m, c_next_m = st.columns(2)
+        with c_prev_m:
+            if st.button("◀", key="m_ant"):
+                if st.session_state.cal_mes == 1:
+                    st.session_state.cal_mes = 12
+                    st.session_state.cal_ano -= 1
+                else:
+                    st.session_state.cal_mes -= 1
+                st.rerun()
+        with c_next_m:
+            if st.button("▶", key="m_prox"):
+                if st.session_state.cal_mes == 12:
+                    st.session_state.cal_mes = 1
+                    st.session_state.cal_ano += 1
+                else:
+                    st.session_state.cal_mes += 1
+                st.rerun()
+
+    ano_sel = st.session_state.cal_ano
+    mes_sel = st.session_state.cal_mes
     
-    # MODAL / FORM DE COPIAR DESPESA PARA OUTRO MÊS
+    eventos_por_dia = {}
+    if not df_prev.empty:
+        for _, row in df_prev.iterrows():
+            try:
+                dt_obj = datetime.strptime(row["data_prevista"], "%Y-%m-%d").date()
+                if dt_obj.year == ano_sel and dt_obj.month == mes_sel:
+                    dia = dt_obj.day
+                    if dia not in eventos_por_dia:
+                        eventos_por_dia[dia] = []
+                    eventos_por_dia[dia].append(row)
+            except:
+                pass
+
+    cal_matrix = calendar.monthcalendar(ano_sel, mes_sel)
+    dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+    html_cal = '<table class="cal-table"><thead><tr>'
+    for d_sem in dias_semana:
+        html_cal += f'<th class="cal-th">{d_sem}</th>'
+    html_cal += '</tr></thead><tbody>'
+
+    for semana in cal_matrix:
+        html_cal += '<tr>'
+        for dia in semana:
+            if dia == 0:
+                html_cal += '<td class="cal-cell" style="background: transparent; border-color: transparent;"></td>'
+            else:
+                is_today = (dia == hoje.day and mes_sel == hoje.month and ano_sel == hoje.year)
+                classes = ["cal-cell"]
+                if is_today:
+                    classes.append("today")
+
+                badges_html = ""
+                if dia in eventos_por_dia:
+                    tem_in = any(ev["tipo"] == "Entrada" for ev in eventos_por_dia[dia])
+                    tem_out = any(ev["tipo"] == "Saída" for ev in eventos_por_dia[dia])
+                    if tem_in and tem_out:
+                        classes.append("has-ambos")
+                    elif tem_in:
+                        classes.append("has-entrada")
+                    elif tem_out:
+                        classes.append("has-saida")
+
+                    for ev in eventos_por_dia[dia]:
+                        cls_b = "badge-in" if ev["tipo"] == "Entrada" else "badge-out"
+                        sinal_b = "+" if ev["tipo"] == "Entrada" else "-"
+                        v_curto = f"{sinal_b}{ev['valor']:,.0f}".replace(",", ".")
+                        badges_html += f'<span class="cal-badge {cls_b}">{v_curto}</span>'
+
+                cls_str = " ".join(classes)
+                html_cal += f'<td class="{cls_str}"><span style="color: {"#38bdf8" if is_today else "#94a3b8"};">{dia}</span>{badges_html}</td>'
+        html_cal += '</tr>'
+    html_cal += '</tbody></table>'
+
+    st.markdown(html_cal, unsafe_allow_html=True)
+    st.markdown("""
+    <div style="display: flex; gap: 12px; margin: 8px 0 12px 0; font-size: 0.65rem;">
+        <span style="color: #4ade80;">🟢 Dia com valor a receber</span>
+        <span style="color: #f87171;">🔴 Dia com valor a pagar</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # MODAL DE COPIAR DESPESA
     if st.session_state.copiando_prev is not None:
         c_origem = st.session_state.copiando_prev
         st.markdown("""
         <div style="background: #101c2e; border: 1px solid #a855f7; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
-            <span style="font-size: 0.82rem; font-weight: 800; color: #a855f7;">📋 Duplicar / Copiar Lançamento para Outro Mês</span>
+            <span style="font-size: 0.82rem; font-weight: 800; color: #a855f7;">📋 Copiar Lançamento para Outro Mês</span>
         """, unsafe_allow_html=True)
         with st.form("form_copiar_previsto"):
             dt_base_copia = datetime.strptime(c_origem["data_prevista"], "%Y-%m-%d").date() + relativedelta(months=1)
             c_cp1, c_cp2 = st.columns(2)
             with c_cp1:
-                nova_data = st.date_input("Nova Data de Vencimento/Entrada", value=dt_base_copia)
-                novo_val = st.number_input("Valor Ajustado (R$)", min_value=0.01, value=float(c_origem["valor"]), step=10.0)
+                nova_data = st.date_input("Nova Data", value=dt_base_copia)
+                novo_val = st.number_input("Valor (R$)", min_value=0.01, value=float(c_origem["valor"]), step=10.0)
             with c_cp2:
                 nova_desc = st.text_input("Descrição", value=c_origem["descricao"])
                 idx_banco_c = df_bancos["banco"].tolist().index(c_origem["banco"]) if c_origem["banco"] in df_bancos["banco"].tolist() else 0
@@ -808,7 +861,7 @@ elif st.session_state.bloco_ativo == "previstos":
             
             c_salv_cp, c_canc_cp = st.columns(2)
             with c_salv_cp:
-                if st.form_submit_button("📋 Confirmar e Lançar no Mês"):
+                if st.form_submit_button("📋 Confirmar Cópia"):
                     adicionar_previsto(nova_data.strftime("%Y-%m-%d"), nova_desc, novo_val, c_origem["categoria"], c_origem["tipo"], novo_banco, 1, c_origem.get("fixo", 0))
                     st.session_state.copiando_prev = None
                     st.success("Lançamento copiado com sucesso!")
@@ -850,15 +903,15 @@ elif st.session_state.bloco_ativo == "previstos":
                     if st.form_submit_button("💾 Salvar Alterações"):
                         atualizar_previsto(row_edit["id"], e_data.strftime("%Y-%m-%d"), e_desc, e_valor, e_cat, e_tipo, e_banco, 1 if e_fixo else 0)
                         st.session_state.editando_id = None
-                        st.success("Lançamento atualizado com sucesso!")
+                        st.success("Lançamento atualizado!")
                         st.rerun()
                 with c_canc:
-                    if st.form_submit_button("✕ Cancelar Edição"):
+                    if st.form_submit_button("✕ Cancelar"):
                         st.session_state.editando_id = None
                         st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-    # Alternar exibição do Formulário
+    # Alternar Formulário de Novo Lançamento
     btn_txt = "➖ Ocultar Formulário" if st.session_state.mostrar_form_prev else "➕ Agendar Novo Lançamento"
     if st.button(btn_txt, key="toggle_form_prev"):
         st.session_state.mostrar_form_prev = not st.session_state.mostrar_form_prev
@@ -866,7 +919,7 @@ elif st.session_state.bloco_ativo == "previstos":
 
     if st.session_state.mostrar_form_prev:
         with st.form("form_add_previsto"):
-            st.markdown('<div style="font-size: 0.75rem; font-weight: 700; color: #38bdf8; margin-bottom: 8px;">Dados do Lançamento Futuro:</div>', unsafe_allow_html=True)
+            st.markdown('<div style="font-size: 0.75rem; font-weight: 700; color: #38bdf8; margin-bottom: 8px;">Dados do Lançamento:</div>', unsafe_allow_html=True)
             c_p1, c_p2 = st.columns(2)
             with c_p1:
                 data_sel = st.date_input("Data de Início", value=date.today())
@@ -880,7 +933,6 @@ elif st.session_state.bloco_ativo == "previstos":
             st.markdown('<div style="margin-top: 6px; padding: 8px; background: #0d1522; border-radius: 10px; border: 1px solid #1a273b;">', unsafe_allow_html=True)
             fixo_check = st.checkbox("📌 Fixar Renda/Gasto Recorrente (Mesmo dia todos os meses)")
             meses_qtd = st.slider("Repetir por quantos meses consecutivos?", min_value=1, max_value=12, value=1)
-            st.caption("Exemplo: replique por vários meses e copie despesas variáveis conforme necessário.")
             st.markdown('</div>', unsafe_allow_html=True)
                 
             if st.form_submit_button("💾 Confirmar Agendamento"):
@@ -899,9 +951,9 @@ elif st.session_state.bloco_ativo == "previstos":
                 st.rerun()
 
     # Lista de Previsões Agendadas
-    st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Previsões no Calendário:</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Lista Detalhada de Previsões:</div>', unsafe_allow_html=True)
     if df_prev.empty:
-        st.info("Nenhuma previsão agendada. Toque no botão acima para adicionar uma nova.")
+        st.info("Nenhuma previsão agendada.")
     else:
         for idx, row_p in df_prev.iterrows():
             is_ent = row_p["tipo"] == "Entrada"
@@ -926,7 +978,7 @@ elif st.session_state.bloco_ativo == "previstos":
                 c_cp, c_ed, c_del = st.columns(3)
                 with c_cp:
                     st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
-                    if st.button("📋", key=f"btn_cp_{row_p['id']}", help="Copiar esta despesa/renda para outro mês"):
+                    if st.button("📋", key=f"btn_cp_{row_p['id']}", help="Copiar este lançamento para outro mês"):
                         st.session_state.copiando_prev = row_p.to_dict()
                         st.session_state.editando_id = None
                         st.rerun()
@@ -946,6 +998,123 @@ elif st.session_state.bloco_ativo == "previstos":
                             st.session_state.editando_id = None
                         st.rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.bloco_ativo == "destinar_reembolso":
+    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
+    c_tit, c_fech = st.columns([5, 1])
+    with c_tit:
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">⛽ Entrada & Destinação de Reembolso KM</span>', unsafe_allow_html=True)
+    with c_fech:
+        if st.button("✕", key="fechar_km"):
+            st.session_state.bloco_ativo = None
+            st.rerun()
+
+    st.markdown("""
+    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 10px 0 14px 0;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Como funciona o rateio de reembolso:</div>
+        <div style="font-size: 0.68rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;">
+            Recebeu o reembolso da empresa? Digite o valor total que caiu e <strong>distribua diretamente para onde o dinheiro deve ir</strong>. O app abate automaticamente a fatura do cartão usado no pedágio, repõe o cheque especial usado no combustível e deixa o lucro das diárias (R$ 100/dia) livre na conta!
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Botão de toggle sem bug de fontes
+    btn_calc_label = "➖ Ocultar Calculadora de Estimativa" if st.session_state.mostrar_calc_km else "🧮 Abrir Calculadora de Estimativa (R$ 130/dia + Pedágios)"
+    if st.button(btn_calc_label, key="toggle_calc_km"):
+        st.session_state.mostrar_calc_km = not st.session_state.mostrar_calc_km
+        st.rerun()
+
+    if st.session_state.mostrar_calc_km:
+        st.markdown('<div style="background: #111a28; border: 1px solid #1c2a3d; border-radius: 12px; padding: 12px; margin-bottom: 14px;">', unsafe_allow_html=True)
+        c_c1, c_c2 = st.columns(2)
+        with c_c1:
+            dias_est = st.number_input("Dias de alocação", min_value=1, value=5, step=1)
+            pedagio_dia = st.number_input("Pedágio diário (Ida + Volta)", min_value=0.0, value=25.60, step=1.0)
+        with c_c2:
+            gasolina_est = dias_est * 30.0
+            diarias_lucro = dias_est * 100.0
+            pedagio_total_est = dias_est * pedagio_dia
+            total_est = (dias_est * 130.0) + pedagio_total_est
+            st.caption(f"⛽ Gasolina (R$ 30/dia): **R$ {gasolina_est:,.2f}**")
+            st.caption(f"💰 Lucro Livre (R$ 100/dia): **R$ {diarias_lucro:,.2f}**")
+            st.caption(f"🛣️ Pedágios Cartão: **R$ {pedagio_total_est:,.2f}**")
+            st.markdown(f"**Total Esperado:** <span style='color: #4ade80; font-weight: 800;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with st.form("form_rateio_reembolso"):
+        st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #ffffff; margin-bottom: 8px;">1. Entrada Total de Reembolso Recebido:</div>', unsafe_allow_html=True)
+        c_v1, c_v2 = st.columns(2)
+        with c_v1:
+            data_receb = st.date_input("Data do Recebimento", value=date.today())
+        with c_v2:
+            valor_total_recebido = st.number_input("Valor Total que Caiu (R$)", min_value=0.01, value=778.00, step=20.0)
+
+        st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">2. Destinar o Valor para Abates e Saldo:</div>', unsafe_allow_html=True)
+        st.caption("Distribua o dinheiro. O valor é descontado imediatamente na fatura/cheque selecionado:")
+
+        # Destino A (Layout espaçado em 2 colunas para nunca cortar texto)
+        st.markdown('<div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">', unsafe_allow_html=True)
+        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">🎯 Destino A (Ex: Pedágio no Cartão)</span>', unsafe_allow_html=True)
+        c_a1, c_a2 = st.columns(2)
+        with c_a1:
+            banco_a = st.selectbox("Banco", df_bancos["banco"].tolist(), index=df_bancos["banco"].tolist().index("Nubank") if "Nubank" in df_bancos["banco"].tolist() else 0, key="b_a")
+        with c_a2:
+            val_a = st.number_input("Valor (R$)", min_value=0.0, value=128.00, step=10.0, key="v_a")
+        acao_a = st.selectbox("Ação a Executar", ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], index=0, key="ac_a")
+        motivo_a = st.text_input("Identificação / Motivo", value="Pedágio da semana (Cartão de Crédito)", key="m_a")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Destino B
+        st.markdown('<div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">', unsafe_allow_html=True)
+        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #fbbf24;">🎯 Destino B (Ex: Repor Gasolina no Cheque Especial)</span>', unsafe_allow_html=True)
+        c_b1, c_b2 = st.columns(2)
+        with c_b1:
+            banco_b = st.selectbox("Banco", df_bancos["banco"].tolist(), index=df_bancos["banco"].tolist().index("Bradesco") if "Bradesco" in df_bancos["banco"].tolist() else 0, key="b_b")
+        with c_b2:
+            val_b = st.number_input("Valor (R$)", min_value=0.0, value=150.00, step=10.0, key="v_b")
+        acao_b = st.selectbox("Ação a Executar", ["Abater Cheque Especial", "Pagar/Abater Fatura de Cartão", "Creditar em Conta Corrente"], index=0, key="ac_b")
+        motivo_b = st.text_input("Identificação / Motivo", value="Gasolina tirada do Cheque Especial", key="m_b")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Destino C
+        sobra_lucro = max(0.0, valor_total_recebido - (val_a + val_b))
+        st.markdown('<div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">', unsafe_allow_html=True)
+        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #4ade80;">🎯 Destino C (Ex: Renda Livre das Diárias de R$ 100)</span>', unsafe_allow_html=True)
+        c_c1, c_c2 = st.columns(2)
+        with c_c1:
+            banco_c = st.selectbox("Banco", df_bancos["banco"].tolist(), index=df_bancos["banco"].tolist().index("Itaú") if "Itaú" in df_bancos["banco"].tolist() else 0, key="b_c")
+        with c_c2:
+            val_c = st.number_input("Valor (R$)", min_value=0.0, value=float(sobra_lucro), step=10.0, key="v_c")
+        acao_c = st.selectbox("Ação a Executar", ["Creditar em Conta Corrente", "Pagar/Abater Fatura de Cartão", "Abater Cheque Especial"], index=0, key="ac_c")
+        motivo_c = st.text_input("Identificação / Motivo", value="Renda livre das diárias alocadas", key="m_c")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if st.form_submit_button("🚀 Executar Entrada & Destinar Automaticamente"):
+            destinos = [
+                {"banco": banco_a, "acao": acao_a, "valor": val_a, "motivo": motivo_a},
+                {"banco": banco_b, "acao": acao_b, "valor": val_b, "motivo": motivo_b},
+                {"banco": banco_c, "acao": acao_c, "valor": val_c, "motivo": motivo_c}
+            ]
+            aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), valor_total_recebido, destinos)
+            st.success("Reembolso distribuído com sucesso! Os valores foram abatidos e creditados nos bancos correspondentes.")
+            st.rerun()
+
+    # Histórico de Distribuições
+    if not df_reemb_hist.empty:
+        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Histórico de Reembolsos Destinados:</div>', unsafe_allow_html=True)
+        for _, row_h in df_reemb_hist.iterrows():
+            st.markdown(f"""
+            <div style="background: #0d1522; border: 1px solid #1a273b; border-radius: 12px; padding: 10px; margin-bottom: 6px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.8rem; font-weight: 700; color: #ffffff;">📅 {row_h['data']}</span>
+                    <span style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: #4ade80;">Total: R$ {row_h['valor_total']:,.2f}</span>
+                </div>
+                <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;">
+                    {row_h['detalhes']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "advisor":
@@ -1012,19 +1181,23 @@ elif st.session_state.bloco_ativo == "vencimentos":
             st.session_state.bloco_ativo = None
             st.rerun()
     
-    banco_venc = st.selectbox("Selecione o Cartão para Configurar", df_bancos["banco"].tolist(), key="sel_banco_venc")
-    info_banco = df_bancos[df_bancos["banco"] == banco_venc].iloc[0]
-    
-    c_venc1, c_venc2 = st.columns(2)
-    with c_venc1:
-        dia_fech = st.number_input("Melhor dia de compra (Fechamento)", min_value=1, max_value=31, value=int(info_banco.get("dia_fechamento", 3)))
-    with c_venc2:
-        dia_venc = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=int(info_banco.get("dia_vencimento", 10)))
+    bancos_com_cartao = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
+    if not bancos_com_cartao:
+        st.info("Nenhum banco configurado com cartão de crédito. Ative a opção na aba 'Ajustes'.")
+    else:
+        banco_venc = st.selectbox("Selecione o Cartão para Configurar", bancos_com_cartao, key="sel_banco_venc")
+        info_banco = df_bancos[df_bancos["banco"] == banco_venc].iloc[0]
         
-    if st.button("💾 Salvar Datas deste Cartão", key="salvar_datas"):
-        atualizar_vencimentos(banco_venc, dia_venc, dia_fech)
-        st.success(f"Datas de {banco_venc} salvas: Fechamento dia {dia_fech} • Vencimento dia {dia_venc}!")
-        st.rerun()
+        c_venc1, c_venc2 = st.columns(2)
+        with c_venc1:
+            dia_fech = st.number_input("Melhor dia de compra (Fechamento)", min_value=1, max_value=31, value=int(info_banco.get("dia_fechamento", 3)))
+        with c_venc2:
+            dia_venc = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=int(info_banco.get("dia_vencimento", 10)))
+            
+        if st.button("💾 Salvar Datas deste Cartão", key="salvar_datas"):
+            atualizar_vencimentos(banco_venc, dia_venc, dia_fech)
+            st.success(f"Datas de {banco_venc} salvas: Fechamento dia {dia_fech} • Vencimento dia {dia_venc}!")
+            st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "graficos":
@@ -1068,50 +1241,82 @@ with tab_bancos:
     st.markdown('<div class="sec-header">Contas & Cartões</div>', unsafe_allow_html=True)
     
     for _, b in df_bancos.iterrows():
-        lim_disp = max(0.0, b["limite_cartao"] - b["fatura_atual"])
         b_saldo = b["saldo_conta"]
         msg_banco, cls_banco = get_status_saldo(b_saldo)
-        dia_v = int(b.get("dia_vencimento", 10))
-        dia_f = int(b.get("dia_fechamento", 3))
+        tem_cartao = (b.get("tem_cartao", 1) == 1)
         
-        st.markdown(f"""
-        <div class="bank-card">
-            <div class="bank-card-top">
-                <span class="bank-badge">
-                    <span class="bank-dot" style="background-color: {b['cor_identificador']};"></span>
-                    {b['banco']}
-                </span>
-                <span class="md-msg-pill {cls_banco}" style="margin-bottom: 0; font-size: 0.65rem;">
-                    {msg_banco}
-                </span>
+        if tem_cartao:
+            lim_disp = max(0.0, b["limite_cartao"] - b["fatura_atual"])
+            dia_v = int(b.get("dia_vencimento", 10))
+            dia_f = int(b.get("dia_fechamento", 3))
+            
+            st.markdown(f"""
+            <div class="bank-card">
+                <div class="bank-card-top">
+                    <span class="bank-badge">
+                        <span class="bank-dot" style="background-color: {b['cor_identificador']};"></span>
+                        {b['banco']}
+                    </span>
+                    <span class="md-msg-pill {cls_banco}" style="margin-bottom: 0; font-size: 0.65rem;">
+                        {msg_banco}
+                    </span>
+                </div>
+                <div class="bank-grid">
+                    <div class="bank-stat">
+                        <div class="bank-stat-lbl">Saldo Conta</div>
+                        <div class="bank-stat-val">R$ {b_saldo:,.2f}</div>
+                    </div>
+                    <div class="bank-stat">
+                        <div class="bank-stat-lbl">Fatura Cartão</div>
+                        <div class="bank-stat-val" style="color: #38bdf8;">R$ {b['fatura_atual']:,.2f}</div>
+                        <div style="font-size: 0.62rem; color: #64748b; margin-top: 2px;">Vence dia {dia_v} (Fecha {dia_f})</div>
+                    </div>
+                    <div class="bank-stat-full">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span class="bank-stat-lbl">Limite Cartão Livre</span>
+                                <div style="font-size: 0.8rem; font-weight: 700; color: #ffffff;">R$ {lim_disp:,.2f}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="bank-stat-lbl">Cheque Especial Usado</span>
+                                <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem; font-weight: 700; color: {'#f87171' if b['cheque_especial_usado'] > 0 else '#94a3b8'};">
+                                    R$ {b['cheque_especial_usado']:,.2f}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="bank-grid">
-                <div class="bank-stat">
-                    <div class="bank-stat-lbl">Saldo Conta</div>
-                    <div class="bank-stat-val">R$ {b_saldo:,.2f}</div>
+            """, unsafe_allow_html=True)
+        else:
+            # BANCO SEM CARTÃO: Fica em branco a parte de fatura/cartão, mostrando só saldo e cheque!
+            st.markdown(f"""
+            <div class="bank-card">
+                <div class="bank-card-top">
+                    <span class="bank-badge">
+                        <span class="bank-dot" style="background-color: {b['cor_identificador']};"></span>
+                        {b['banco']} <span style="font-size: 0.65rem; color: #64748b; font-weight: 500;">(Sem cartão de crédito)</span>
+                    </span>
+                    <span class="md-msg-pill {cls_banco}" style="margin-bottom: 0; font-size: 0.65rem;">
+                        {msg_banco}
+                    </span>
                 </div>
-                <div class="bank-stat">
-                    <div class="bank-stat-lbl">Fatura Cartão</div>
-                    <div class="bank-stat-val" style="color: #38bdf8;">R$ {b['fatura_atual']:,.2f}</div>
-                    <div style="font-size: 0.62rem; color: #64748b; margin-top: 2px;">Vence dia {dia_v} (Fecha {dia_f})</div>
-                </div>
-                <div class="bank-stat-full">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="bank-grid-single">
+                    <div class="bank-stat" style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
-                            <span class="bank-stat-lbl">Limite Cartão Livre</span>
-                            <div style="font-size: 0.8rem; font-weight: 700; color: #ffffff;">R$ {lim_disp:,.2f}</div>
+                            <div class="bank-stat-lbl">Saldo em Conta Corrente</div>
+                            <div class="bank-stat-val" style="font-size: 1.15rem;">R$ {b_saldo:,.2f}</div>
                         </div>
                         <div style="text-align: right;">
-                            <span class="bank-stat-lbl">Cheque Especial Usado</span>
-                            <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem; font-weight: 700; color: {'#f87171' if b['cheque_especial_usado'] > 0 else '#94a3b8'};">
+                            <div class="bank-stat-lbl">Cheque Especial Usado</div>
+                            <div style="font-family: 'JetBrains Mono'; font-size: 0.9rem; font-weight: 700; color: {'#f87171' if b['cheque_especial_usado'] > 0 else '#94a3b8'};">
                                 R$ {b['cheque_especial_usado']:,.2f}
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
 with tab_extrato:
     c_ext_t, c_ext_b = st.columns([3.5, 1.5])
@@ -1150,7 +1355,13 @@ with tab_novo:
         desc = st.text_input("Descrição", value="Mercado / Compra")
         val = st.number_input("Valor (R$)", value=25.00, min_value=0.01, step=1.0)
         banco = st.selectbox("Banco", df_bancos["banco"].tolist())
-        meio = st.radio("Método", ["Cartão de Crédito", "Conta Corrente / Pix"], horizontal=True)
+        
+        info_b = df_bancos[df_bancos["banco"] == banco].iloc[0]
+        opcoes_meio = ["Conta Corrente / Pix"]
+        if info_b.get("tem_cartao", 1) == 1:
+            opcoes_meio.insert(0, "Cartão de Crédito")
+            
+        meio = st.radio("Método", opcoes_meio, horizontal=True)
         cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Saúde", "Outros"])
         tipo = st.selectbox("Tipo", ["Saída", "Entrada"])
         
@@ -1160,7 +1371,7 @@ with tab_novo:
             st.rerun()
 
 with tab_ajustes:
-    st.markdown('<div class="sec-header">Ajuste de Limites, Saldos & Datas</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-header">Ajuste de Limites, Saldos & Cartões</div>', unsafe_allow_html=True)
     
     st.markdown('<div class="btn-clear" style="margin-bottom: 12px;">', unsafe_allow_html=True)
     if st.button("⚠️ Zerar Todos os Saldos e Faturas", key="btn_zerar_saldos_tudo"):
@@ -1169,19 +1380,46 @@ with tab_ajustes:
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
     
-    banco_edit = st.selectbox("Selecione o Banco", df_bancos["banco"].tolist())
+    banco_edit = st.selectbox("Selecione o Banco para Configurar", df_bancos["banco"].tolist())
     row_banco = df_bancos[df_bancos["banco"] == banco_edit].iloc[0]
     
     with st.form("form_edit_saldo"):
-        novo_saldo = st.number_input("Saldo em Conta (R$)", value=float(row_banco["saldo_conta"]), step=10.0)
-        nova_fat = st.number_input("Fatura do Cartão (R$)", value=float(row_banco["fatura_atual"]), step=10.0)
-        novo_lim = st.number_input("Limite do Cartão (R$)", value=float(row_banco["limite_cartao"]), step=100.0)
+        st.markdown(f'<div style="font-weight: 800; color: #38bdf8; margin-bottom: 8px;">Configurações de {banco_edit}</div>', unsafe_allow_html=True)
+        
+        # OPÇÃO NÃO OBRIGATÓRIA: Possui Cartão de Crédito?
+        possui_cartao = st.checkbox("💳 Possui Cartão de Crédito neste banco?", value=bool(row_banco.get("tem_cartao", 1)))
+        
+        novo_saldo = st.number_input("Saldo em Conta Corrente (R$)", value=float(row_banco["saldo_conta"]), step=10.0)
         lim_ch = st.number_input("Limite Cheque Especial (R$)", value=float(row_banco["limite_cheque_especial"]), step=100.0)
         ch_usado = st.number_input("Cheque Especial Usado (R$)", value=float(row_banco["cheque_especial_usado"]), step=10.0)
-        dia_v = st.number_input("Dia do Vencimento da Fatura", min_value=1, max_value=31, value=int(row_banco.get("dia_vencimento", 10)))
-        dia_f = st.number_input("Dia de Fechamento da Fatura", min_value=1, max_value=31, value=int(row_banco.get("dia_fechamento", 3)))
         
-        if st.form_submit_button("Salvar Todos os Dados"):
-            atualizar_banco(banco_edit, nova_fat, novo_lim, novo_saldo, lim_ch, ch_usado, dia_v, dia_f)
-            st.success("Valores e vencimentos atualizados!")
+        if possui_cartao:
+            st.markdown('<div style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-top: 10px;">Dados do Cartão de Crédito:</div>', unsafe_allow_html=True)
+            c_crd1, c_crd2 = st.columns(2)
+            with c_crd1:
+                nova_fat = st.number_input("Fatura Atual (R$)", value=float(row_banco["fatura_atual"]), step=10.0)
+                dia_v = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=int(row_banco.get("dia_vencimento", 10)))
+            with c_crd2:
+                novo_lim = st.number_input("Limite do Cartão (R$)", value=float(row_banco["limite_cartao"]), step=100.0)
+                dia_f = st.number_input("Dia de Fechamento", min_value=1, max_value=31, value=int(row_banco.get("dia_fechamento", 3)))
+        else:
+            nova_fat = 0.0
+            novo_lim = 0.0
+            dia_v = int(row_banco.get("dia_vencimento", 10))
+            dia_f = int(row_banco.get("dia_fechamento", 3))
+            st.caption("ℹ️ Este banco não possui cartão. A tela principal ocultará a seção de fatura e limites.")
+        
+        if st.form_submit_button("Salvar Configurações"):
+            atualizar_banco_completo(
+                banco_edit, 
+                1 if possui_cartao else 0, 
+                nova_fat, 
+                novo_lim, 
+                novo_saldo, 
+                lim_ch, 
+                ch_usado, 
+                dia_v, 
+                dia_f
+            )
+            st.success("Configurações atualizadas!")
             st.rerun()
