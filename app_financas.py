@@ -7,10 +7,6 @@ from dateutil.relativedelta import relativedelta
 
 import io
 import urllib.parse
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
 
 st.set_page_config(page_title="Minhas Finanças", page_icon="⚡", layout="centered")
 
@@ -755,55 +751,91 @@ def estornar_item_destino(id_item):
 
 
 def gerar_relatorio_pdf(dados_bancos, entradas_m, saidas_m, saldo_proj, total_parc_m, total_rest_parc, diagnosticos_texto):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
-    styles = getSampleStyleSheet()
-    
-    title_style = ParagraphStyle('RepTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, textColor=colors.HexColor('#0284c7'), spaceAfter=4)
-    sub_style = ParagraphStyle('RepSub', parent=styles['Normal'], fontName='Helvetica', fontSize=8, textColor=colors.HexColor('#64748b'), spaceAfter=10)
-    h2_style = ParagraphStyle('RepH2', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=11, textColor=colors.HexColor('#0f172a'), spaceBefore=8, spaceAfter=4)
-    body_style = ParagraphStyle('RepBody', parent=styles['Normal'], fontName='Helvetica', fontSize=8.5, textColor=colors.HexColor('#334155'), leading=12)
-
-    elements = []
-    elements.append(Paragraph("RELATÓRIO FINANCEIRO CONSOLIDADO & SAÚDE", title_style))
-    elements.append(Paragraph(f"Gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')} • Balanço Geral do Mês Vigente", sub_style))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#38bdf8'), spaceAfter=10))
-    
     tot_saldo = dados_bancos["saldo_conta"].sum()
     tot_fat = dados_bancos[dados_bancos["tem_cartao"] == 1]["fatura_atual"].sum()
     tot_chq = dados_bancos["cheque_especial_usado"].sum()
     
-    tabela_resumo = [
-        ["SALDO ATUAL", "FATURAS TOTAIS", "CHEQUE USADO", "SALDO PROJETADO"],
-        [f"R$ {tot_saldo:,.2f}", f"R$ {tot_fat:,.2f}", f"R$ {tot_chq:,.2f}", f"R$ {saldo_proj:,.2f}"]
+    content_lines = []
+    # Cabeçalho
+    content_lines.append("BT /F1 16 Tf 50 750 Td (RELATORIO FINANCEIRO CONSOLIDADO & SAUDE) Tj ET")
+    data_str = datetime.now().strftime("%d/%m/%Y as %H:%M")
+    content_lines.append(f"BT /F1 9 Tf 50 732 Td (Gerado em {data_str} - Balanco Geral do Mes Vigente) Tj ET")
+    
+    # Linha divisória
+    content_lines.append("0.1 0.5 0.8 rg 50 722 512 2 re f")
+    
+    # Resumo
+    y = 700
+    content_lines.append(f"BT /F1 12 Tf 50 {y} Td (RESUMO FINANCEIRO CONSOLIDADO:) Tj ET")
+    y -= 18
+    
+    kpis = [
+        ("Saldo Total em Conta Corrente", f"R$ {tot_saldo:,.2f}"),
+        ("Faturas Totais de Cartao", f"R$ {tot_fat:,.2f}"),
+        ("Limite Cheque Especial em Uso", f"R$ {tot_chq:,.2f}"),
+        ("Entradas Previstas no Mes", f"+ R$ {entradas_m:,.2f}"),
+        ("Saidas Previstas no Mes", f"- R$ {saidas_m:,.2f}"),
+        ("Saldo Projetado Final", f"R$ {saldo_proj:,.2f}"),
+        ("Parcelas Comprometidas no Mes", f"R$ {total_parc_m:,.2f}"),
+        ("Saldo Devedor Restante em Parcelas", f"R$ {total_rest_parc:,.2f}")
     ]
-    t_kpi = Table(tabela_resumo, colWidths=[135, 135, 135, 135])
-    t_kpi.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0f172a')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 8),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('FONTNAME', (0,1), (-1,1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,1), (-1,1), 10),
-        ('TEXTCOLOR', (0,1), (0,1), colors.HexColor('#0284c7')),
-        ('TEXTCOLOR', (1,1), (1,1), colors.HexColor('#e11d48')),
-        ('TEXTCOLOR', (2,1), (2,1), colors.HexColor('#dc2626')),
-        ('TEXTCOLOR', (3,1), (3,1), colors.HexColor('#16a34a')),
-        ('TOPPADDING', (0,0), (-1,-1), 6),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
-    ]))
-    elements.append(t_kpi)
-    elements.append(Spacer(1, 10))
-
-    elements.append(Paragraph("DIRETRIZES PARA OTIMIZAÇÃO DA SUA SAÚDE FINANCEIRA:", h2_style))
-    for diag in diagnosticos_texto:
-        elements.append(Paragraph(f"• <b>{diag['titulo']}</b>: {diag['desc']}", body_style))
-        elements.append(Spacer(1, 4))
+    
+    for k, v in kpis:
+        safe_k = k.replace("(", "").replace(")", "")
+        content_lines.append(f"BT /F1 9 Tf 50 {y} Td ({safe_k}:) Tj ET")
+        content_lines.append(f"BT /F1 10 Tf 280 {y} Td ({v}) Tj ET")
+        y -= 15
         
-    doc.build(elements)
-    return buffer.getvalue()
+    y -= 12
+    content_lines.append(f"BT /F1 12 Tf 50 {y} Td (DIRETRIZES PARA OTIMIZACAO DA SUA SAUDE FINANCEIRA:) Tj ET")
+    y -= 18
+    
+    for diag in diagnosticos_texto:
+        tit = diag.get("titulo", "").replace("(", "").replace(")", "")
+        content_lines.append(f"BT /F1 10 Tf 50 {y} Td ([!] {tit}) Tj ET")
+        y -= 14
+        
+        desc = diag.get("desc", "").replace("(", "").replace(")", "")
+        words = desc.split(" ")
+        cur_l = "    "
+        for w in words:
+            if len(cur_l) + len(w) + 1 > 85:
+                content_lines.append(f"BT /F1 8 Tf 50 {y} Td ({cur_l}) Tj ET")
+                y -= 12
+                cur_l = "    " + w
+            else:
+                cur_l += " " + w
+        if cur_l.strip():
+            content_lines.append(f"BT /F1 8 Tf 50 {y} Td ({cur_l}) Tj ET")
+            y -= 16
+
+    stream_data = "\n".join(content_lines).encode("latin-1", "replace")
+    
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length " + str(len(stream_data)).encode() + b" >>\nstream\n" + stream_data + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+    ]
+    
+    pdf = bytearray()
+    pdf.extend(b"%PDF-1.4\n")
+    offsets = []
+    for i, obj in enumerate(objects, 1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{i} 0 obj\n".encode())
+        pdf.extend(obj)
+        pdf.extend(b"\nendobj\n")
+        
+    startxref = len(pdf)
+    pdf.extend(b"xref\n0 " + str(len(objects) + 1).encode() + b"\n")
+    pdf.extend(b"0000000000 65535 f \n")
+    for off in offsets:
+        pdf.extend(f"{off:010d} 00000 n \n".encode())
+    pdf.extend(b"trailer\n<< /Size " + str(len(objects) + 1).encode() + b" /Root 1 0 R >>\n")
+    pdf.extend(b"startxref\n" + str(startxref).encode() + b"\n%%EOF")
+    return bytes(pdf)
 
 def get_status_saldo(saldo):
     if saldo < 0:
