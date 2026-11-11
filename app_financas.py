@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 
 st.set_page_config(page_title="Minhas Finanças", page_icon="⚡", layout="centered")
 
-# Estilo Moderno Dark Bento UI / MacroDroid
+# Estilo Moderno Dark Bento UI / MacroDroid (sem quebrar ícones de sistema do Streamlit)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
@@ -218,7 +218,7 @@ st.markdown("""
         margin-bottom: 1.4rem;
     }
 
-    /* Card Item de Previsão */
+    /* Card Item de Previsão / Parcela */
     .prev-item-card {
         background: #0d1522;
         border: 1px solid #1a273b;
@@ -228,6 +228,39 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
+    }
+
+    .parcela-card {
+        background: #111a28;
+        border: 1px solid #1e2c40;
+        border-radius: 14px;
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+    .parcela-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+    .parcela-badge {
+        font-size: 0.68rem;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: #1a2538;
+        color: #38bdf8;
+    }
+    .parcela-progresso {
+        background: #1a2538;
+        height: 6px;
+        border-radius: 4px;
+        overflow: hidden;
+        margin: 8px 0;
+    }
+    .parcela-progresso-bar {
+        background: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
+        height: 100%;
     }
 
     /* Botão de Limpar / Danger */
@@ -262,7 +295,7 @@ st.markdown("""
 
     /* Abas */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 6px;
+        gap: 4px;
         background-color: #121a28;
         padding: 6px;
         border-radius: 16px;
@@ -272,11 +305,11 @@ st.markdown("""
         height: 36px;
         border-radius: 10px;
         color: #94a3b8;
-        font-size: 0.72rem;
+        font-size: 0.70rem;
         font-weight: 700;
         border: none !important;
         background: transparent;
-        padding: 0 10px;
+        padding: 0 8px;
     }
     .stTabs [aria-selected="true"] {
         background-color: #1f2d42 !important;
@@ -382,6 +415,18 @@ def init_db():
         )
     """)
     c.execute("""
+        CREATE TABLE IF NOT EXISTS compras_parceladas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            banco TEXT,
+            descricao TEXT,
+            valor_parcela REAL,
+            parcela_atual INTEGER,
+            total_parcelas INTEGER,
+            mes_ano_fim TEXT,
+            categoria TEXT
+        )
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS reembolsos_destinados (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             data TEXT,
@@ -396,6 +441,7 @@ def init_db():
             cor_identificador TEXT,
             tem_cartao INTEGER DEFAULT 1,
             limite_cartao REAL DEFAULT 0,
+            limite_liberado REAL DEFAULT 0,
             fatura_atual REAL DEFAULT 0,
             saldo_conta REAL DEFAULT 0,
             limite_cheque_especial REAL DEFAULT 0,
@@ -416,6 +462,8 @@ def init_db():
     cols = [col[1] for col in c.fetchall()]
     if "tem_cartao" not in cols:
         c.execute("ALTER TABLE contas_bancarias ADD COLUMN tem_cartao INTEGER DEFAULT 1")
+    if "limite_liberado" not in cols:
+        c.execute("ALTER TABLE contas_bancarias ADD COLUMN limite_liberado REAL DEFAULT 0")
 
     c.execute("UPDATE contas_bancarias SET banco = 'Itaú', cor_identificador = '#ec7000' WHERE banco = 'Inter'")
     c.execute("UPDATE transacoes SET banco = 'Itaú' WHERE banco = 'Inter'")
@@ -424,16 +472,16 @@ def init_db():
     c.execute("SELECT COUNT(*) FROM contas_bancarias")
     if c.fetchone()[0] == 0:
         bancos_dados = [
-            ("Nubank", "#a855f7", 1, 5000.00, 1954.00, 0.00, 0.00, 0.00, 10, 3),
-            ("Caixa Econômica", "#38bdf8", 0, 0.00, 0.00, 2000.00, 0.00, 0.00, 15, 8),
-            ("Mercado Pago", "#ffe600", 0, 0.00, 0.00, 1500.00, 0.00, 0.00, 5, 28),
-            ("Bradesco", "#f43f5e", 1, 4000.00, 0.00, 0.00, 1800.00, 0.00, 20, 13),
-            ("Itaú", "#ec7000", 1, 6000.00, 0.00, 0.00, 1000.00, 0.00, 25, 18)
+            ("Nubank", "#a855f7", 1, 5000.00, 3046.00, 1954.00, 0.00, 0.00, 0.00, 10, 3),
+            ("Caixa Econômica", "#38bdf8", 0, 0.00, 0.00, 0.00, 2000.00, 0.00, 0.00, 15, 8),
+            ("Mercado Pago", "#ffe600", 0, 0.00, 0.00, 0.00, 1500.00, 0.00, 0.00, 5, 28),
+            ("Bradesco", "#f43f5e", 1, 4000.00, 2200.00, 0.00, 0.00, 1800.00, 0.00, 20, 13),
+            ("Itaú", "#ec7000", 1, 6000.00, 5000.00, 0.00, 0.00, 1000.00, 0.00, 25, 18)
         ]
         c.executemany("""
             INSERT INTO contas_bancarias 
-            (banco, cor_identificador, tem_cartao, limite_cartao, fatura_atual, saldo_conta, limite_cheque_especial, cheque_especial_usado, dia_vencimento, dia_fechamento)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (banco, cor_identificador, tem_cartao, limite_cartao, limite_liberado, fatura_atual, saldo_conta, limite_cheque_especial, cheque_especial_usado, dia_vencimento, dia_fechamento)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, bancos_dados)
     
     conn.commit()
@@ -456,6 +504,12 @@ def get_transacoes():
 def get_previstos():
     conn = sqlite3.connect("financas.db")
     df = pd.read_sql_query("SELECT * FROM lancamentos_previstos ORDER BY data_prevista ASC", conn)
+    conn.close()
+    return df
+
+def get_parcelas():
+    conn = sqlite3.connect("financas.db")
+    df = pd.read_sql_query("SELECT * FROM compras_parceladas ORDER BY id DESC", conn)
     conn.close()
     return df
 
@@ -499,6 +553,45 @@ def remover_previsto(id_prev):
     conn.commit()
     conn.close()
 
+def adicionar_parcela(banco, desc, valor_parcela, parcela_atual, total_parcelas, cat):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    meses_restantes = max(0, total_parcelas - parcela_atual)
+    dt_fim = date.today() + relativedelta(months=meses_restantes)
+    meses_nomes_pt = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    mes_ano_fim = f"{meses_nomes_pt[dt_fim.month - 1]}/{dt_fim.year}"
+    
+    c.execute("""
+        INSERT INTO compras_parceladas (banco, descricao, valor_parcela, parcela_atual, total_parcelas, mes_ano_fim, categoria)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (banco, desc, valor_parcela, parcela_atual, total_parcelas, mes_ano_fim, cat))
+    conn.commit()
+    conn.close()
+
+def avancar_parcela(id_parc):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("SELECT parcela_atual, total_parcelas FROM compras_parceladas WHERE id = ?", (id_parc,))
+    row = c.fetchone()
+    if row:
+        p_atual, p_total = row
+        if p_atual < p_total:
+            nova_atual = p_atual + 1
+            meses_restantes = max(0, p_total - nova_atual)
+            dt_fim = date.today() + relativedelta(months=meses_restantes)
+            meses_nomes_pt = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+            mes_ano_fim = f"{meses_nomes_pt[dt_fim.month - 1]}/{dt_fim.year}"
+            c.execute("UPDATE compras_parceladas SET parcela_atual = ?, mes_ano_fim = ? WHERE id = ?", (nova_atual, mes_ano_fim, id_parc))
+    conn.commit()
+    conn.close()
+
+def remover_parcela(id_parc):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM compras_parceladas WHERE id = ?", (id_parc,))
+    conn.commit()
+    conn.close()
+
 def limpar_todas_previsoes():
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
@@ -520,14 +613,14 @@ def zerar_saldos_e_faturas():
     conn.commit()
     conn.close()
 
-def atualizar_banco_completo(banco, tem_cartao, fatura, lim_cartao, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech):
+def atualizar_banco_completo(banco, tem_cartao, fatura, lim_cartao, lim_liberado, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech):
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("""
         UPDATE contas_bancarias 
-        SET tem_cartao = ?, fatura_atual = ?, limite_cartao = ?, saldo_conta = ?, limite_cheque_especial = ?, cheque_especial_usado = ?, dia_vencimento = ?, dia_fechamento = ?
+        SET tem_cartao = ?, fatura_atual = ?, limite_cartao = ?, limite_liberado = ?, saldo_conta = ?, limite_cheque_especial = ?, cheque_especial_usado = ?, dia_vencimento = ?, dia_fechamento = ?
         WHERE banco = ?
-    """, (tem_cartao, fatura, lim_cartao, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech, banco))
+    """, (tem_cartao, fatura, lim_cartao, lim_liberado, saldo, lim_cheque, cheque_usado, dia_venc, dia_fech, banco))
     conn.commit()
     conn.close()
 
@@ -619,6 +712,7 @@ def get_status_saldo(saldo):
 df_bancos = get_contas()
 df_tx = get_transacoes()
 df_prev = get_previstos()
+df_parc = get_parcelas()
 df_reemb_hist = get_historico_reembolsos()
 
 total_faturas = df_bancos[df_bancos["tem_cartao"] == 1]["fatura_atual"].sum()
@@ -632,6 +726,9 @@ if "bloco_ativo" not in st.session_state:
 
 if "mostrar_form_prev" not in st.session_state:
     st.session_state.mostrar_form_prev = False
+
+if "mostrar_form_parc" not in st.session_state:
+    st.session_state.mostrar_form_parc = False
 
 if "mostrar_calc_km" not in st.session_state:
     st.session_state.mostrar_calc_km = False
@@ -1229,9 +1326,10 @@ elif st.session_state.bloco_ativo == "graficos":
         st.markdown(f"**Total computado no gráfico:** R$ {df_gastos['valor'].sum():,.2f}")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Abas Principais
-tab_bancos, tab_extrato, tab_novo, tab_ajustes = st.tabs([
-    "Bancos", 
+# Abas Principais (Com aba 'Parcelas' ao lado de 'Bancos')
+tab_bancos, tab_parcelas, tab_extrato, tab_novo, tab_ajustes = st.tabs([
+    "Bancos",
+    "Parcelas", 
     "Extrato Completo", 
     "Lançar", 
     "Ajustes"
@@ -1246,7 +1344,11 @@ with tab_bancos:
         tem_cartao = (b.get("tem_cartao", 1) == 1)
         
         if tem_cartao:
-            lim_disp = max(0.0, b["limite_cartao"] - b["fatura_atual"])
+            lim_total = b.get("limite_cartao", 0.0)
+            lim_liberado = b.get("limite_liberado", 0.0)
+            # Se limite liberado estiver zerado, exibe a diferença matemática padrão
+            lim_exibir = lim_liberado if lim_liberado > 0 else max(0.0, lim_total - b["fatura_atual"])
+            
             dia_v = int(b.get("dia_vencimento", 10))
             dia_f = int(b.get("dia_fechamento", 3))
             
@@ -1271,11 +1373,19 @@ with tab_bancos:
                         <div class="bank-stat-val" style="color: #38bdf8;">R$ {b['fatura_atual']:,.2f}</div>
                         <div style="font-size: 0.62rem; color: #64748b; margin-top: 2px;">Vence dia {dia_v} (Fecha {dia_f})</div>
                     </div>
+                    <div class="bank-stat">
+                        <div class="bank-stat-lbl">Limite do Cartão (Total)</div>
+                        <div class="bank-stat-val" style="color: #cbd5e1; font-size: 0.88rem;">R$ {lim_total:,.2f}</div>
+                    </div>
+                    <div class="bank-stat">
+                        <div class="bank-stat-lbl">Limite Liberado (De Fato)</div>
+                        <div class="bank-stat-val" style="color: #4ade80; font-size: 0.88rem;">R$ {lim_exibir:,.2f}</div>
+                    </div>
                     <div class="bank-stat-full">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <span class="bank-stat-lbl">Limite Cartão Livre</span>
-                                <div style="font-size: 0.8rem; font-weight: 700; color: #ffffff;">R$ {lim_disp:,.2f}</div>
+                                <span class="bank-stat-lbl">Status Cartão</span>
+                                <div style="font-size: 0.75rem; font-weight: 700; color: #94a3b8;">Cartão Ativo</div>
                             </div>
                             <div style="text-align: right;">
                                 <span class="bank-stat-lbl">Cheque Especial Usado</span>
@@ -1317,6 +1427,117 @@ with tab_bancos:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+# NOVA ABA DE PARCELAS
+with tab_parcelas:
+    st.markdown('<div class="sec-header">Controle de Compras Parceladas</div>', unsafe_allow_html=True)
+    
+    # Resumo das Parcelas
+    if not df_parc.empty:
+        total_mensal_parcelas = df_parc["valor_parcela"].sum()
+        total_saldo_restante = sum((row["total_parcelas"] - row["parcela_atual"]) * row["valor_parcela"] for _, row in df_parc.iterrows())
+    else:
+        total_mensal_parcelas = 0.0
+        total_saldo_restante = 0.0
+
+    st.markdown(f"""
+    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin-bottom: 12px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 700;">TOTAL PARCELAS ESTE MÊS</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #ffffff;">R$ {total_mensal_parcelas:,.2f}</div>
+            </div>
+            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.62rem; color: #fbbf24; font-weight: 700;">SALDO DEVEDOR RESTANTE</span>
+                <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #fbbf24;">R$ {total_saldo_restante:,.2f}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Botão para alternar formulário de nova parcela
+    btn_p_label = "➖ Ocultar Formulário" if st.session_state.mostrar_form_parc else "➕ Cadastrar Nova Compra Parcelada"
+    if st.button(btn_p_label, key="toggle_form_parc"):
+        st.session_state.mostrar_form_parc = not st.session_state.mostrar_form_parc
+        st.rerun()
+
+    if st.session_state.mostrar_form_parc:
+        with st.form("form_add_parcela"):
+            st.markdown('<div style="font-size: 0.78rem; font-weight: 800; color: #38bdf8; margin-bottom: 8px;">Nova Compra Parcelada:</div>', unsafe_allow_html=True)
+            bancos_cartao_disp = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
+            if not bancos_cartao_disp:
+                bancos_cartao_disp = df_bancos["banco"].tolist()
+
+            c_parc1, c_parc2 = st.columns(2)
+            with c_parc1:
+                banco_p = st.selectbox("Cartão de Crédito", bancos_cartao_disp)
+                p_atual = st.number_input("Parcela Atual (que está pagando)", min_value=1, max_value=60, value=1, step=1)
+                v_parc = st.number_input("Valor da Parcela (R$)", min_value=0.01, value=150.00, step=10.0)
+            with c_parc2:
+                desc_p = st.text_input("Descrição da Compra", value="Compra Parcelada")
+                p_total = st.number_input("Total de Parcelas (ex: 10x)", min_value=1, max_value=60, value=10, step=1)
+                cat_p = st.selectbox("Categoria", ["Eletrônicos", "Casa", "Vestuário", "Veículo", "Saúde", "Outros"])
+
+            if st.form_submit_button("💾 Salvar Compra Parcelada"):
+                adicionar_parcela(banco_p, desc_p, v_parc, p_atual, p_total, cat_p)
+                st.session_state.mostrar_form_parc = False
+                st.success("Compra parcelada cadastrada com sucesso!")
+                st.rerun()
+
+    # Filtro por Cartão
+    bancos_cartao_filtro = ["Todos os Cartões"] + df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
+    sel_filtro_cartao = st.selectbox("Filtrar por Cartão:", bancos_cartao_filtro, key="filtro_cartao_parcelas")
+
+    df_parc_filtrado = df_parc if sel_filtro_cartao == "Todos os Cartões" else df_parc[df_parc["banco"] == sel_filtro_cartao]
+
+    if df_parc_filtrado.empty:
+        st.info("Nenhuma compra parcelada registrada para este cartão.")
+    else:
+        for _, row_pc in df_parc_filtrado.iterrows():
+            p_at = row_pc["parcela_atual"]
+            p_tot = row_pc["total_parcelas"]
+            v_parc_row = row_pc["valor_parcela"]
+            restante_compra = max(0, p_tot - p_at) * v_parc_row
+            pct = min(100.0, (p_at / p_tot) * 100) if p_tot > 0 else 0
+
+            st.markdown(f"""
+            <div class="parcela-card">
+                <div class="parcela-top">
+                    <div>
+                        <span style="font-size: 0.84rem; font-weight: 800; color: #ffffff;">{row_pc['descricao']}</span>
+                        <div style="font-size: 0.65rem; color: #94a3b8;">Cartão {row_pc['banco']} • {row_pc['categoria']}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: #38bdf8;">R$ {v_parc_row:,.2f}/mês</span>
+                    </div>
+                </div>
+                <div class="parcela-progresso">
+                    <div class="parcela-progresso-bar" style="width: {pct:.1f}%;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; margin-top: 4px;">
+                    <span style="color: #cbd5e1; font-weight: 700;">Parcela {p_at} de {p_tot} ({pct:.0f}% paga)</span>
+                    <span style="color: #fbbf24; font-weight: 700;">Falta: R$ {restante_compra:,.2f}</span>
+                </div>
+                <div style="font-size: 0.65rem; color: #4ade80; font-weight: 700; margin-top: 3px;">
+                    🏁 Término previsto: {row_pc['mes_ano_fim']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            c_btn_parc1, c_btn_parc2 = st.columns([3, 1])
+            with c_btn_parc1:
+                if p_at < p_tot:
+                    if st.button(f"Pagar +1 Parcela ({p_at + 1}/{p_tot})", key=f"avancar_{row_pc['id']}"):
+                        avancar_parcela(row_pc["id"])
+                        st.rerun()
+                else:
+                    st.caption("✅ Compra 100% quitada!")
+            with c_btn_parc2:
+                st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+                if st.button("🗑️", key=f"del_parc_{row_pc['id']}", help="Excluir esta compra"):
+                    remover_parcela(row_pc["id"])
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_extrato:
     c_ext_t, c_ext_b = st.columns([3.5, 1.5])
@@ -1397,14 +1618,20 @@ with tab_ajustes:
             st.markdown('<div style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-top: 10px;">Dados do Cartão de Crédito:</div>', unsafe_allow_html=True)
             c_crd1, c_crd2 = st.columns(2)
             with c_crd1:
+                novo_lim = st.number_input("Limite Total do Cartão (R$)", value=float(row_banco["limite_cartao"]), step=100.0)
                 nova_fat = st.number_input("Fatura Atual (R$)", value=float(row_banco["fatura_atual"]), step=10.0)
                 dia_v = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=int(row_banco.get("dia_vencimento", 10)))
             with c_crd2:
-                novo_lim = st.number_input("Limite do Cartão (R$)", value=float(row_banco["limite_cartao"]), step=100.0)
+                # CAMPO NOVO: LIMITE LIBERADO
+                lim_lib_padrao = float(row_banco.get("limite_liberado", 0.0))
+                if lim_lib_padrao == 0.0 and novo_lim > 0:
+                    lim_lib_padrao = max(0.0, novo_lim - nova_fat)
+                novo_lim_liberado = st.number_input("Limite Liberado (De Fato) (R$)", value=lim_lib_padrao, step=100.0)
                 dia_f = st.number_input("Dia de Fechamento", min_value=1, max_value=31, value=int(row_banco.get("dia_fechamento", 3)))
         else:
             nova_fat = 0.0
             novo_lim = 0.0
+            novo_lim_liberado = 0.0
             dia_v = int(row_banco.get("dia_vencimento", 10))
             dia_f = int(row_banco.get("dia_fechamento", 3))
             st.caption("ℹ️ Este banco não possui cartão. A tela principal ocultará a seção de fatura e limites.")
@@ -1415,6 +1642,7 @@ with tab_ajustes:
                 1 if possui_cartao else 0, 
                 nova_fat, 
                 novo_lim, 
+                novo_lim_liberado,
                 novo_saldo, 
                 lim_ch, 
                 ch_usado, 
