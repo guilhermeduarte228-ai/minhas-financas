@@ -350,7 +350,7 @@ def init_db():
         )
     """)
     
-    # Migrações seguras: Inter -> Itaú e Mercado Pago Amarelo
+    # Migrações seguras
     c.execute("UPDATE contas_bancarias SET banco = 'Itaú', cor_identificador = '#ec7000' WHERE banco = 'Inter'")
     c.execute("UPDATE transacoes SET banco = 'Itaú' WHERE banco = 'Inter'")
     c.execute("UPDATE contas_bancarias SET cor_identificador = '#ffe600' WHERE banco = 'Mercado Pago'")
@@ -767,7 +767,7 @@ elif st.session_state.bloco_ativo == "previstos":
 
     # COMPARATIVO ATUAL VS PROJETADO
     st.markdown(f"""
-    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin-nx: 10px 0 14px 0;">
+    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 10px 0 14px 0;">
         <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Comparativo: Atual vs. Projetado</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
             <div style="background: #111a28; padding: 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
@@ -964,7 +964,7 @@ elif st.session_state.bloco_ativo == "advisor":
         diagnosticos.append({
             "titulo": "⚠️ Alerta Crítico: Cheque Especial Ativo",
             "tipo": "danger",
-            "desc": f"Você está utilizando R$ {total_cheque:,.2f} do limite emergencial. Use o botão ⛽ Destinar para abater o cheque especial assim que receber reembolsos de gasolina da empresa."
+            "desc": f"Você está utilizando R$ {total_cheque:,.2f} do limite emergencial. Priorize destinar os reembolsos KM para abater esse valor e estancar os juros."
         })
     else:
         diagnosticos.append({
