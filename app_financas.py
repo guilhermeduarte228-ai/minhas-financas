@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
 
 st.set_page_config(page_title="Minhas Finanças", page_icon="⚡", layout="centered")
 
@@ -114,7 +115,7 @@ st.markdown("""
         color: #94a3b8;
     }
 
-    /* Botões de Recursos Rápidos (Pílulas / Tiles) */
+    /* Botões de Recursos Rápidos */
     .recursos-wrapper div[data-testid="column"] button {
         background: #141d2a !important;
         border: 1px solid #223247 !important;
@@ -298,6 +299,21 @@ st.markdown("""
         background: rgba(239, 68, 68, 0.25) !important;
         border-color: #f87171 !important;
     }
+
+    /* Botão de Editar */
+    .btn-edit button {
+        background: rgba(56, 189, 248, 0.12) !important;
+        color: #38bdf8 !important;
+        border: 1px solid rgba(56, 189, 248, 0.35) !important;
+        border-radius: 10px !important;
+        font-size: 0.72rem !important;
+        font-weight: 700 !important;
+        padding: 0.4rem 0.8rem !important;
+    }
+    .btn-edit button:hover {
+        background: rgba(56, 189, 248, 0.25) !important;
+        border-color: #38bdf8 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -325,9 +341,17 @@ def init_db():
             valor REAL,
             categoria TEXT,
             tipo TEXT,
-            banco TEXT DEFAULT 'Nubank'
+            banco TEXT DEFAULT 'Nubank',
+            fixo INTEGER DEFAULT 0
         )
     """)
+    
+    # Adiciona coluna 'fixo' caso não exista
+    c.execute("PRAGMA table_info(lancamentos_previstos)")
+    cols_prev = [col[1] for col in c.fetchall()]
+    if "fixo" not in cols_prev:
+        c.execute("ALTER TABLE lancamentos_previstos ADD COLUMN fixo INTEGER DEFAULT 0")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS contas_bancarias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -350,7 +374,7 @@ def init_db():
         )
     """)
     
-    # Migrações seguras
+    # Migrações seguras: Inter -> Itaú e Mercado Pago Amarelo
     c.execute("UPDATE contas_bancarias SET banco = 'Itaú', cor_identificador = '#ec7000' WHERE banco = 'Inter'")
     c.execute("UPDATE transacoes SET banco = 'Itaú' WHERE banco = 'Inter'")
     c.execute("UPDATE contas_bancarias SET cor_identificador = '#ffe600' WHERE banco = 'Mercado Pago'")
@@ -370,20 +394,6 @@ def init_db():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, bancos_dados)
     
-    # Inicializa flag de primeiro setup para NUNCA mais recriar previsões se o usuário tiver excluído!
-    c.execute("SELECT valor FROM app_config WHERE chave = 'previstos_iniciados'")
-    flag = c.fetchone()
-    if not flag:
-        previstos_ex = [
-            (datetime.now().strftime("%Y-%m-05"), "Salário / Rendimentos", 4500.00, "Renda", "Entrada", "Itaú"),
-            (datetime.now().strftime("%Y-%m-10"), "Fatura de Cartão", 1954.00, "Fatura", "Saída", "Nubank"),
-        ]
-        c.executemany("""
-            INSERT INTO lancamentos_previstos (data_prevista, descricao, valor, categoria, tipo, banco)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, previstos_ex)
-        c.execute("INSERT INTO app_config (chave, valor) VALUES ('previstos_iniciados', '1')")
-
     conn.commit()
     conn.close()
 
@@ -407,13 +417,30 @@ def get_previstos():
     conn.close()
     return df
 
-def adicionar_previsto(data_str, desc, valor, cat, tipo, banco):
+def adicionar_previsto(data_str, desc, valor, cat, tipo, banco, meses_repetir=1, fixo=0):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    data_base = datetime.strptime(data_str, "%Y-%m-%d").date()
+    
+    for i in range(meses_repetir):
+        data_mes = data_base + relativedelta(months=i)
+        data_final_str = data_mes.strftime("%Y-%m-%d")
+        c.execute("""
+            INSERT INTO lancamentos_previstos (data_prevista, descricao, valor, categoria, tipo, banco, fixo)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (data_final_str, desc, valor, cat, tipo, banco, fixo))
+        
+    conn.commit()
+    conn.close()
+
+def atualizar_previsto(id_prev, data_str, desc, valor, cat, tipo, banco, fixo):
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("""
-        INSERT INTO lancamentos_previstos (data_prevista, descricao, valor, categoria, tipo, banco)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (data_str, desc, valor, cat, tipo, banco))
+        UPDATE lancamentos_previstos
+        SET data_prevista = ?, descricao = ?, valor = ?, categoria = ?, tipo = ?, banco = ?, fixo = ?
+        WHERE id = ?
+    """, (data_str, desc, valor, cat, tipo, banco, fixo, id_prev))
     conn.commit()
     conn.close()
 
@@ -511,6 +538,9 @@ if "bloco_ativo" not in st.session_state:
 if "mostrar_form_prev" not in st.session_state:
     st.session_state.mostrar_form_prev = False
 
+if "editando_id" not in st.session_state:
+    st.session_state.editando_id = None
+
 # Barra Superior
 st.markdown("""
 <div class="md-header">
@@ -538,7 +568,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# RECURSOS RÁPIDOS
+# RECURSOS RÁPIDOS (5 Opções Limpas)
 st.markdown('<div class="sec-header">Recursos Rápidos</div>', unsafe_allow_html=True)
 st.markdown('<div class="recursos-wrapper">', unsafe_allow_html=True)
 col1, col2, col3, col4, col5 = st.columns(5)
@@ -580,6 +610,7 @@ if st.session_state.bloco_ativo == "previstos":
         st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
         if st.button("🗑️ Limpar Todos", key="btn_limpar_prev", help="Apaga todas as previsões agendadas"):
             limpar_todas_previsoes()
+            st.session_state.editando_id = None
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
     with c_fech:
@@ -610,7 +641,46 @@ if st.session_state.bloco_ativo == "previstos":
     </div>
     """, unsafe_allow_html=True)
     
-    # Botão para alternar exibição do Formulário
+    # PAINEL DE EDIÇÃO (Se algum item estiver sendo editado)
+    if st.session_state.editando_id is not None:
+        item_edit = df_prev[df_prev["id"] == st.session_state.editando_id]
+        if not item_edit.empty:
+            row_edit = item_edit.iloc[0]
+            st.markdown("""
+            <div style="background: #101c2e; border: 1px solid #38bdf8; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
+                <span style="font-size: 0.82rem; font-weight: 800; color: #38bdf8;">✏️ Editando Lançamento</span>
+            """, unsafe_allow_html=True)
+            with st.form("form_editar_previsto"):
+                e_data_base = datetime.strptime(row_edit["data_prevista"], "%Y-%m-%d").date()
+                c_e1, c_e2 = st.columns(2)
+                with c_e1:
+                    e_data = st.date_input("Data do Lançamento", value=e_data_base)
+                    e_tipo = st.selectbox("Tipo de Operação", ["Entrada", "Saída"], index=0 if row_edit["tipo"] == "Entrada" else 1)
+                    e_valor = st.number_input("Valor (R$)", min_value=0.01, value=float(row_edit["valor"]), step=50.0)
+                with c_e2:
+                    e_desc = st.text_input("Descrição", value=row_edit["descricao"])
+                    idx_banco = df_bancos["banco"].tolist().index(row_edit["banco"]) if row_edit["banco"] in df_bancos["banco"].tolist() else 0
+                    e_banco = st.selectbox("Banco", df_bancos["banco"].tolist(), index=idx_banco)
+                    cats = ["Renda", "Salário", "Fatura", "Contas Fixas", "Lazer", "Outros"]
+                    idx_cat = cats.index(row_edit["categoria"]) if row_edit["categoria"] in cats else 0
+                    e_cat = st.selectbox("Categoria", cats, index=idx_cat)
+                
+                e_fixo = st.checkbox("Fixar este lançamento (Renda/Gasto Recorrente)", value=bool(row_edit.get("fixo", 0)))
+                
+                c_salv, c_canc = st.columns(2)
+                with c_salv:
+                    if st.form_submit_button("💾 Salvar Alterações"):
+                        atualizar_previsto(row_edit["id"], e_data.strftime("%Y-%m-%d"), e_desc, e_valor, e_cat, e_tipo, e_banco, 1 if e_fixo else 0)
+                        st.session_state.editando_id = None
+                        st.success("Lançamento atualizado com sucesso!")
+                        st.rerun()
+                with c_canc:
+                    if st.form_submit_button("✕ Cancelar Edição"):
+                        st.session_state.editando_id = None
+                        st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    # Botão para alternar exibição do Formulário de Novo Lançamento
     btn_txt = "➖ Ocultar Formulário" if st.session_state.mostrar_form_prev else "➕ Agendar Novo Lançamento"
     if st.button(btn_txt, key="toggle_form_prev"):
         st.session_state.mostrar_form_prev = not st.session_state.mostrar_form_prev
@@ -621,18 +691,33 @@ if st.session_state.bloco_ativo == "previstos":
             st.markdown('<div style="font-size: 0.75rem; font-weight: 700; color: #38bdf8; margin-bottom: 8px;">Dados do Lançamento Futuro:</div>', unsafe_allow_html=True)
             c_p1, c_p2 = st.columns(2)
             with c_p1:
-                data_sel = st.date_input("Data Prevista", value=date.today())
+                data_sel = st.date_input("Data de Início", value=date.today())
                 tipo_prev = st.selectbox("Tipo de Operação", ["Entrada", "Saída"])
                 valor_prev = st.number_input("Valor Estimado (R$)", min_value=0.01, value=1500.00, step=50.0)
             with c_p2:
                 desc_prev = st.text_input("Descrição", value="Salário / Pix / Boleto")
                 banco_prev = st.selectbox("Banco Envolvido", df_bancos["banco"].tolist())
                 cat_prev = st.selectbox("Categoria", ["Renda", "Salário", "Fatura", "Contas Fixas", "Lazer", "Outros"])
+            
+            st.markdown('<div style="margin-top: 6px; padding: 8px; background: #0d1522; border-radius: 10px; border: 1px solid #1a273b;">', unsafe_allow_html=True)
+            fixo_check = st.checkbox("📌 Fixar Renda/Gasto Recorrente (Mesmo dia todos os meses)")
+            meses_qtd = st.slider("Repetir por quantos meses consecutivos?", min_value=1, max_value=12, value=1)
+            st.caption("Exemplo: se colocar 6 meses, o lançamento será replicado no mesmo dia durante o próximo semestre.")
+            st.markdown('</div>', unsafe_allow_html=True)
                 
             if st.form_submit_button("💾 Confirmar Agendamento"):
-                adicionar_previsto(data_sel.strftime("%Y-%m-%d"), desc_prev, valor_prev, cat_prev, tipo_prev, banco_prev)
+                adicionar_previsto(
+                    data_sel.strftime("%Y-%m-%d"), 
+                    desc_prev, 
+                    valor_prev, 
+                    cat_prev, 
+                    tipo_prev, 
+                    banco_prev, 
+                    meses_repetir=meses_qtd,
+                    fixo=1 if fixo_check else 0
+                )
                 st.session_state.mostrar_form_prev = False
-                st.success("Previsão salva com sucesso!")
+                st.success(f"Previsão agendada com sucesso para {meses_qtd} mês(es)!")
                 st.rerun()
 
     # Lista de Previsões Agendadas
@@ -644,25 +729,37 @@ if st.session_state.bloco_ativo == "previstos":
             is_ent = row_p["tipo"] == "Entrada"
             sinal_p = "+" if is_ent else "-"
             cor_p = "#4ade80" if is_ent else "#f87171"
-            col_info, col_del = st.columns([4.8, 1.2])
+            tag_fixo = " • 📌 Renda Fixa" if row_p.get("fixo", 0) == 1 else ""
+            
+            col_info, col_botoes = st.columns([3.8, 2.2])
             with col_info:
                 st.markdown(f"""
-                <div class="prev-item-card">
+                <div class="prev-item-card" style="margin-bottom: 6px;">
                     <div>
                         <div style="font-size: 0.8rem; font-weight: 700; color: #ffffff;">{row_p['descricao']}</div>
-                        <div style="font-size: 0.65rem; color: #94a3b8;">📅 {row_p['data_prevista']} • {row_p['banco']} ({row_p['categoria']})</div>
+                        <div style="font-size: 0.65rem; color: #94a3b8;">📅 {row_p['data_prevista']} • {row_p['banco']}{tag_fixo}</div>
                     </div>
-                    <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: {cor_p};">
+                    <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.86rem; color: {cor_p}; text-align: right;">
                         {sinal_p} R$ {row_p['valor']:,.2f}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-            with col_del:
-                st.markdown('<div class="btn-clear" style="margin-top: 6px;">', unsafe_allow_html=True)
-                if st.button("Excluir", key=f"del_p_{row_p['id']}", help="Remover esta previsão"):
-                    remover_previsto(row_p["id"])
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+            with col_botoes:
+                c_ed, c_del = st.columns(2)
+                with c_ed:
+                    st.markdown('<div class="btn-edit" style="margin-top: 4px;">', unsafe_allow_html=True)
+                    if st.button("✏️", key=f"btn_edit_{row_p['id']}", help="Editar este lançamento"):
+                        st.session_state.editando_id = row_p["id"]
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with c_del:
+                    st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
+                    if st.button("🗑️", key=f"del_p_{row_p['id']}", help="Remover esta previsão"):
+                        remover_previsto(row_p["id"])
+                        if st.session_state.editando_id == row_p["id"]:
+                            st.session_state.editando_id = None
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "advisor":
@@ -917,7 +1014,6 @@ with tab_novo:
 with tab_ajustes:
     st.markdown('<div class="sec-header">Ajuste de Limites, Saldos & Datas</div>', unsafe_allow_html=True)
     
-    # Botão de Zerar Tudo
     st.markdown('<div class="btn-clear" style="margin-bottom: 12px;">', unsafe_allow_html=True)
     if st.button("⚠️ Zerar Todos os Saldos e Faturas", key="btn_zerar_saldos_tudo"):
         zerar_saldos_e_faturas()
