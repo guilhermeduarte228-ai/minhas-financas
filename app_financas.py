@@ -7,7 +7,7 @@ from dateutil.relativedelta import relativedelta
 
 st.set_page_config(page_title="Minhas Finanças", page_icon="⚡", layout="centered")
 
-# Estilo Moderno Dark Bento UI / MacroDroid (sem quebrar ícones de sistema do Streamlit)
+# Estilo Moderno Dark Bento UI / MacroDroid
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
@@ -243,14 +243,6 @@ st.markdown("""
         align-items: center;
         margin-bottom: 6px;
     }
-    .parcela-badge {
-        font-size: 0.68rem;
-        font-weight: 800;
-        padding: 2px 8px;
-        border-radius: 6px;
-        background: #1a2538;
-        color: #38bdf8;
-    }
     .parcela-progresso {
         background: #1a2538;
         height: 6px;
@@ -435,6 +427,18 @@ def init_db():
         )
     """)
     c.execute("""
+        CREATE TABLE IF NOT EXISTS reembolsos_destinados_itens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reembolso_id INTEGER,
+            data TEXT,
+            banco TEXT,
+            acao TEXT,
+            valor REAL,
+            motivo TEXT,
+            estornado INTEGER DEFAULT 0
+        )
+    """)
+    c.execute("""
         CREATE TABLE IF NOT EXISTS contas_bancarias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             banco TEXT UNIQUE,
@@ -516,6 +520,12 @@ def get_parcelas():
 def get_historico_reembolsos():
     conn = sqlite3.connect("financas.db")
     df = pd.read_sql_query("SELECT * FROM reembolsos_destinados ORDER BY id DESC", conn)
+    conn.close()
+    return df
+
+def get_reembolsos_itens():
+    conn = sqlite3.connect("financas.db")
+    df = pd.read_sql_query("SELECT * FROM reembolsos_destinados_itens WHERE estornado = 0 ORDER BY id DESC", conn)
     conn.close()
     return df
 
@@ -654,6 +664,9 @@ def aplicar_destinacao_reembolso(data_str, valor_total, lista_destinos):
     c = conn.cursor()
     logs = []
     
+    c.execute("INSERT INTO reembolsos_destinados (data, valor_total, detalhes) VALUES (?, ?, ?)", (data_str, valor_total, ""))
+    reemb_id = c.lastrowid
+    
     for item in lista_destinos:
         banco = item["banco"]
         acao = item["acao"]
@@ -664,6 +677,11 @@ def aplicar_destinacao_reembolso(data_str, valor_total, lista_destinos):
             continue
             
         logs.append(f"{banco}: R$ {val:,.2f} ({motivo} -> {acao})")
+        
+        c.execute("""
+            INSERT INTO reembolsos_destinados_itens (reembolso_id, data, banco, acao, valor, motivo, estornado)
+            VALUES (?, ?, ?, ?, ?, ?, 0)
+        """, (reemb_id, data_str, banco, acao, val, motivo))
         
         if acao == "Abater Cheque Especial":
             c.execute("UPDATE contas_bancarias SET cheque_especial_usado = MAX(0.0, cheque_especial_usado - ?) WHERE banco = ?", (val, banco))
@@ -687,11 +705,44 @@ def aplicar_destinacao_reembolso(data_str, valor_total, lista_destinos):
             """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
 
     detalhe_geral = " | ".join(logs)
-    c.execute("""
-        INSERT INTO reembolsos_destinados (data, valor_total, detalhes)
-        VALUES (?, ?, ?)
-    """, (data_str, valor_total, detalhe_geral))
+    c.execute("UPDATE reembolsos_destinados SET detalhes = ? WHERE id = ?", (detalhe_geral, reemb_id))
     
+    conn.commit()
+    conn.close()
+
+def estornar_item_destino(id_item):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("SELECT banco, acao, valor, motivo, estornado, reembolso_id FROM reembolsos_destinados_itens WHERE id = ?", (id_item,))
+    row = c.fetchone()
+    if row and row[4] == 0:
+        banco, acao, val, motivo, _, reemb_id = row
+        val = float(val)
+        
+        if acao == "Abater Cheque Especial":
+            c.execute("UPDATE contas_bancarias SET cheque_especial_usado = cheque_especial_usado + ? WHERE banco = ?", (val, banco))
+            c.execute("""
+                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                VALUES (?, ?, ?, 'Estorno Reembolso', 'Saída', ?, 'Estorno Abate Cheque')
+            """, (datetime.now().strftime("%d/%m %H:%M"), f"Estorno: {motivo}", val, banco))
+            
+        elif acao == "Pagar/Abater Fatura de Cartão":
+            c.execute("UPDATE contas_bancarias SET fatura_atual = fatura_atual + ? WHERE banco = ?", (val, banco))
+            c.execute("""
+                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                VALUES (?, ?, ?, 'Estorno Reembolso', 'Saída', ?, 'Estorno Pagamento Fatura')
+            """, (datetime.now().strftime("%d/%m %H:%M"), f"Estorno: {motivo}", val, banco))
+            
+        elif acao == "Creditar em Conta Corrente":
+            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (val, banco))
+            c.execute("""
+                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                VALUES (?, ?, ?, 'Estorno Reembolso', 'Saída', ?, 'Estorno Crédito Conta')
+            """, (datetime.now().strftime("%d/%m %H:%M"), f"Estorno: {motivo}", val, banco))
+
+        c.execute("UPDATE reembolsos_destinados_itens SET estornado = 1 WHERE id = ?", (id_item,))
+        c.execute("UPDATE reembolsos_destinados SET valor_total = MAX(0.0, valor_total - ?) WHERE id = ?", (val, reemb_id))
+        
     conn.commit()
     conn.close()
 
@@ -714,6 +765,7 @@ df_tx = get_transacoes()
 df_prev = get_previstos()
 df_parc = get_parcelas()
 df_reemb_hist = get_historico_reembolsos()
+df_reemb_itens = get_reembolsos_itens()
 
 total_faturas = df_bancos[df_bancos["tem_cartao"] == 1]["fatura_atual"].sum()
 total_saldos = df_bancos["saldo_conta"].sum()
@@ -772,7 +824,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# RECURSOS RÁPIDOS (2 linhas limpas sem truncar)
+# RECURSOS RÁPIDOS
 st.markdown('<div class="sec-header">Recursos Rápidos</div>', unsafe_allow_html=True)
 st.markdown('<div class="recursos-box">', unsafe_allow_html=True)
 r_col1, r_col2 = st.columns(2)
@@ -815,8 +867,11 @@ if st.session_state.bloco_ativo == "previstos":
             st.session_state.bloco_ativo = None
             st.rerun()
 
-    # Totais Previstos
-    entradas_previstas = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() if not df_prev.empty else 0.0
+    # Totais Previstos (contando previsões regulares + entradas ativas de reembolso)
+    entradas_prev_base = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() if not df_prev.empty else 0.0
+    entradas_reemb_total = df_reemb_itens["valor"].sum() if not df_reemb_itens.empty else 0.0
+    entradas_previstas = entradas_prev_base + entradas_reemb_total
+    
     saidas_previstas = df_prev[df_prev["tipo"] == "Saída"]["valor"].sum() if not df_prev.empty else 0.0
     saldo_projetado = total_saldos + entradas_previstas - saidas_previstas
 
@@ -877,6 +932,8 @@ if st.session_state.bloco_ativo == "previstos":
     mes_sel = st.session_state.cal_mes
     
     eventos_por_dia = {}
+    
+    # 1. Carrega previsões comuns
     if not df_prev.empty:
         for _, row in df_prev.iterrows():
             try:
@@ -886,6 +943,25 @@ if st.session_state.bloco_ativo == "previstos":
                     if dia not in eventos_por_dia:
                         eventos_por_dia[dia] = []
                     eventos_por_dia[dia].append(row)
+            except:
+                pass
+
+    # 2. Carrega também as entradas de reembolso destinadas no calendário
+    if not df_reemb_itens.empty:
+        for _, row_r in df_reemb_itens.iterrows():
+            try:
+                dt_r = datetime.strptime(row_r["data"], "%Y-%m-%d").date()
+                if dt_r.year == ano_sel and dt_r.month == mes_sel:
+                    dia_r = dt_r.day
+                    if dia_r not in eventos_por_dia:
+                        eventos_por_dia[dia_r] = []
+                    eventos_por_dia[dia_r].append({
+                        "descricao": f"⛽ Reembolso: {row_r['motivo']}",
+                        "valor": row_r["valor"],
+                        "tipo": "Entrada",
+                        "banco": row_r["banco"],
+                        "is_reembolso": True
+                    })
             except:
                 pass
 
@@ -933,7 +1009,7 @@ if st.session_state.bloco_ativo == "previstos":
     st.markdown(html_cal, unsafe_allow_html=True)
     st.markdown("""
     <div style="display: flex; gap: 12px; margin: 8px 0 12px 0; font-size: 0.65rem;">
-        <span style="color: #4ade80;">🟢 Dia com valor a receber</span>
+        <span style="color: #4ade80;">🟢 Dia com valor a receber / reembolso</span>
         <span style="color: #f87171;">🔴 Dia com valor a pagar</span>
     </div>
     """, unsafe_allow_html=True)
@@ -1049,9 +1125,10 @@ if st.session_state.bloco_ativo == "previstos":
 
     # Lista de Previsões Agendadas
     st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Lista Detalhada de Previsões:</div>', unsafe_allow_html=True)
-    if df_prev.empty:
+    if df_prev.empty and df_reemb_itens.empty:
         st.info("Nenhuma previsão agendada.")
     else:
+        # Exibe previsões normais
         for idx, row_p in df_prev.iterrows():
             is_ent = row_p["tipo"] == "Entrada"
             sinal_p = "+" if is_ent else "-"
@@ -1095,6 +1172,29 @@ if st.session_state.bloco_ativo == "previstos":
                             st.session_state.editando_id = None
                         st.rerun()
                     st.markdown('</div>', unsafe_allow_html=True)
+
+        # Exibe os reembolsos agendados na lista de previsões também
+        for idx_r, row_r in df_reemb_itens.iterrows():
+            col_info_r, col_botoes_r = st.columns([4.8, 1.2])
+            with col_info_r:
+                st.markdown(f"""
+                <div class="prev-item-card" style="margin-bottom: 6px; border-left: 3px solid #38bdf8;">
+                    <div>
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">⛽ Reembolso: {row_r['motivo']}</div>
+                        <div style="font-size: 0.63rem; color: #94a3b8;">📅 {row_r['data']} • {row_r['banco']} ({row_r['acao']})</div>
+                    </div>
+                    <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.85rem; color: #4ade80; text-align: right;">
+                        + R$ {row_r['valor']:,.2f}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_botoes_r:
+                st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
+                if st.button("↩️", key=f"del_prev_reemb_{row_r['id']}", help="Estornar esta destinação de reembolso"):
+                    estornar_item_destino(row_r["id"])
+                    st.success("Reembolso estornado!")
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "destinar_reembolso":
@@ -1194,7 +1294,6 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
             with c_d1:
                 banco_d = st.selectbox(f"Banco ({letra})", bancos_list, index=sugestao_banco, key=f"b_{letra}")
             with c_d2:
-                # Sugere valor proporcional ou restante
                 val_padrao = 0.0
                 if idx_d == 0 and st.session_state.qtd_destinos == 1:
                     val_padrao = float(valor_total_recebido)
@@ -1225,7 +1324,6 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
             })
 
         if st.form_submit_button("🚀 Executar Entrada & Destinar Automaticamente"):
-            # Filtra apenas os destinos com valor > 0
             destinos_ativos = [d for d in destinos_coletados if d["valor"] > 0]
             if not destinos_ativos:
                 st.error("Informe um valor maior que zero em pelo menos um destino!")
@@ -1235,21 +1333,29 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
                 st.success(f"Reembolso de R$ {valor_total_recebido:,.2f} lançado e rateado com sucesso em {len(destinos_ativos)} destino(s)!")
                 st.rerun()
 
-    # Histórico de Distribuições
-    if not df_reemb_hist.empty:
-        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Histórico de Reembolsos Destinados:</div>', unsafe_allow_html=True)
-        for _, row_h in df_reemb_hist.iterrows():
-            st.markdown(f"""
-            <div style="background: #0d1522; border: 1px solid #1a273b; border-radius: 12px; padding: 10px; margin-bottom: 6px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 0.8rem; font-weight: 700; color: #ffffff;">📅 {row_h['data']}</span>
-                    <span style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: #4ade80;">Total: R$ {row_h['valor_total']:,.2f}</span>
+    # Histórico de Destinações com Estorno Individual
+    df_itens_hist = get_reembolsos_itens()
+    if not df_itens_hist.empty:
+        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Destinações Ativas (Estorno Individual):</div>', unsafe_allow_html=True)
+        for _, item in df_itens_hist.iterrows():
+            c_info_d, c_btn_est = st.columns([4.2, 1.8])
+            with c_info_d:
+                st.markdown(f"""
+                <div style="background: #0d1522; border: 1px solid #1a273b; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-weight: 700; color: #ffffff; font-size: 0.78rem;">{item['banco']} • {item['acao']}</span>
+                        <span style="color: #4ade80; font-family: 'JetBrains Mono'; font-weight: 700;">R$ {item['valor']:,.2f}</span>
+                    </div>
+                    <div style="font-size: 0.65rem; color: #94a3b8;">📅 {item['data']} • {item['motivo']}</div>
                 </div>
-                <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;">
-                    {row_h['detalhes']}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            with c_btn_est:
+                st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
+                if st.button("↩️ Estornar", key=f"btn_est_{item['id']}", help="Desfazer e estornar este valor"):
+                    estornar_item_destino(item["id"])
+                    st.success("Destinação estornada com sucesso!")
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "advisor":
@@ -1384,7 +1490,6 @@ with tab_bancos:
         if tem_cartao:
             lim_total = b.get("limite_cartao", 0.0)
             lim_liberado = b.get("limite_liberado", 0.0)
-            # Se limite liberado estiver zerado, exibe a diferença matemática padrão
             lim_exibir = lim_liberado if lim_liberado > 0 else max(0.0, lim_total - b["fatura_atual"])
             
             dia_v = int(b.get("dia_vencimento", 10))
@@ -1437,7 +1542,7 @@ with tab_bancos:
             </div>
             """, unsafe_allow_html=True)
         else:
-            # BANCO SEM CARTÃO: Fica em branco a parte de fatura/cartão, mostrando só saldo e cheque!
+            # BANCO SEM CARTÃO
             st.markdown(f"""
             <div class="bank-card">
                 <div class="bank-card-top">
@@ -1470,7 +1575,6 @@ with tab_bancos:
 with tab_parcelas:
     st.markdown('<div class="sec-header">Controle de Compras Parceladas</div>', unsafe_allow_html=True)
     
-    # Resumo das Parcelas
     if not df_parc.empty:
         total_mensal_parcelas = df_parc["valor_parcela"].sum()
         total_saldo_restante = sum((row["total_parcelas"] - row["parcela_atual"]) * row["valor_parcela"] for _, row in df_parc.iterrows())
@@ -1493,7 +1597,6 @@ with tab_parcelas:
     </div>
     """, unsafe_allow_html=True)
 
-    # Botão para alternar formulário de nova parcela
     btn_p_label = "➖ Ocultar Formulário" if st.session_state.mostrar_form_parc else "➕ Cadastrar Nova Compra Parcelada"
     if st.button(btn_p_label, key="toggle_form_parc"):
         st.session_state.mostrar_form_parc = not st.session_state.mostrar_form_parc
@@ -1522,7 +1625,6 @@ with tab_parcelas:
                 st.success("Compra parcelada cadastrada com sucesso!")
                 st.rerun()
 
-    # Filtro por Cartão
     bancos_cartao_filtro = ["Todos os Cartões"] + df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
     sel_filtro_cartao = st.selectbox("Filtrar por Cartão:", bancos_cartao_filtro, key="filtro_cartao_parcelas")
 
@@ -1645,7 +1747,6 @@ with tab_ajustes:
     with st.form("form_edit_saldo"):
         st.markdown(f'<div style="font-weight: 800; color: #38bdf8; margin-bottom: 8px;">Configurações de {banco_edit}</div>', unsafe_allow_html=True)
         
-        # OPÇÃO NÃO OBRIGATÓRIA: Possui Cartão de Crédito?
         possui_cartao = st.checkbox("💳 Possui Cartão de Crédito neste banco?", value=bool(row_banco.get("tem_cartao", 1)))
         
         novo_saldo = st.number_input("Saldo em Conta Corrente (R$)", value=float(row_banco["saldo_conta"]), step=10.0)
@@ -1660,7 +1761,6 @@ with tab_ajustes:
                 nova_fat = st.number_input("Fatura Atual (R$)", value=float(row_banco["fatura_atual"]), step=10.0)
                 dia_v = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=int(row_banco.get("dia_vencimento", 10)))
             with c_crd2:
-                # CAMPO NOVO: LIMITE LIBERADO
                 lim_lib_padrao = float(row_banco.get("limite_liberado", 0.0))
                 if lim_lib_padrao == 0.0 and novo_lim > 0:
                     lim_lib_padrao = max(0.0, novo_lim - nova_fat)
