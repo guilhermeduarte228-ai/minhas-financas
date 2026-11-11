@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -836,6 +837,58 @@ def gerar_relatorio_pdf(dados_bancos, entradas_m, saidas_m, saldo_proj, total_pa
     pdf.extend(b"trailer\n<< /Size " + str(len(objects) + 1).encode() + b" /Root 1 0 R >>\n")
     pdf.extend(b"startxref\n" + str(startxref).encode() + b"\n%%EOF")
     return bytes(pdf)
+
+def parse_ofx_content(text):
+    transactions = []
+    bal_match = re.search(r"<LEDGERBAL>[\s\S]*?<BALAMT>([\-\d\.,]+)", text, re.IGNORECASE)
+    ledger_bal = None
+    if bal_match:
+        try:
+            ledger_bal = float(bal_match.group(1).replace(",", "."))
+        except:
+            pass
+
+    trns = re.findall(r"<STMTTRN>([\s\S]*?)</STMTTRN>", text, re.IGNORECASE)
+    if not trns:
+        trns = re.findall(r"<STMTTRN>([\s\S]*?)(?=<STMTTRN>|</BANKTRANLIST>|</CCDATA>|</STMTRS>|\Z)", text, re.IGNORECASE)
+
+    for block in trns:
+        amt_match = re.search(r"<TRNAMT>([\-\d\.,]+)", block, re.IGNORECASE)
+        date_match = re.search(r"<DTPOSTED>(\d{8})", block, re.IGNORECASE)
+        memo_match = re.search(r"<MEMO>([^\r\n<]+)", block, re.IGNORECASE)
+        name_match = re.search(r"<NAME>([^\r\n<]+)", block, re.IGNORECASE)
+        type_match = re.search(r"<TRNTYPE>([^\r\n<]+)", block, re.IGNORECASE)
+        
+        if amt_match:
+            try:
+                amt = float(amt_match.group(1).replace(",", "."))
+            except:
+                continue
+                
+            raw_date = date_match.group(1) if date_match else ""
+            if len(raw_date) == 8:
+                formatted_date = f"{raw_date[6:8]}/{raw_date[4:6]}/{raw_date[0:4]}"
+            else:
+                formatted_date = datetime.now().strftime("%d/%m/%Y")
+                
+            desc = ""
+            if memo_match:
+                desc = memo_match.group(1).strip()
+            elif name_match:
+                desc = name_match.group(1).strip()
+            else:
+                desc = "Transação OFX"
+                
+            tipo_trn = type_match.group(1).strip().upper() if type_match else ""
+            
+            transactions.append({
+                "data": formatted_date,
+                "descricao": desc,
+                "valor": amt,
+                "tipo_ofx": tipo_trn
+            })
+            
+    return transactions, ledger_bal
 
 def get_status_saldo(saldo):
     if saldo < 0:
@@ -1914,25 +1967,165 @@ with tab_extrato:
             """, unsafe_allow_html=True)
 
 with tab_novo:
-    st.markdown('<div class="sec-header">Nova Transação Manual</div>', unsafe_allow_html=True)
-    with st.form("form_novo_lanc"):
-        desc = st.text_input("Descrição", value="Mercado / Compra")
-        val = st.number_input("Valor (R$)", value=25.00, min_value=0.01, step=1.0)
-        banco = st.selectbox("Banco", df_bancos["banco"].tolist())
-        
-        info_b = df_bancos[df_bancos["banco"] == banco].iloc[0]
-        opcoes_meio = ["Conta Corrente / Pix"]
-        if info_b.get("tem_cartao", 1) == 1:
-            opcoes_meio.insert(0, "Cartão de Crédito")
+    st.markdown('<div class="sec-header">Lançamentos & Importações</div>', unsafe_allow_html=True)
+    
+    modo_lanc = st.radio("Como deseja lançar?", ["✍️ Manual", "📂 Importar Arquivo OFX"], horizontal=True, key="modo_lanc_radio")
+    
+    if modo_lanc == "✍️ Manual":
+        with st.form("form_novo_lanc"):
+            desc = st.text_input("Descrição", value="Mercado / Compra")
+            val = st.number_input("Valor (R$)", value=25.00, min_value=0.01, step=1.0)
+            banco = st.selectbox("Banco", df_bancos["banco"].tolist())
             
-        meio = st.radio("Método", opcoes_meio, horizontal=True)
-        cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Saúde", "Outros"])
-        tipo = st.selectbox("Tipo", ["Saída", "Entrada"])
+            info_b = df_bancos[df_bancos["banco"] == banco].iloc[0]
+            opcoes_meio = ["Conta Corrente / Pix"]
+            if info_b.get("tem_cartao", 1) == 1:
+                opcoes_meio.insert(0, "Cartão de Crédito")
+                
+            meio = st.radio("Método", opcoes_meio, horizontal=True)
+            cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Saúde", "Outros"])
+            tipo = st.selectbox("Tipo", ["Saída", "Entrada"])
+            
+            if st.form_submit_button("Confirmar Lançamento"):
+                adicionar_transacao(datetime.now().strftime("%d/%m %H:%M"), desc, val, cat, banco, meio, tipo)
+                st.success("Transação registrada com sucesso!")
+                st.rerun()
+                
+    else:
+        st.markdown("""
+        <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 12px; padding: 10px; margin-bottom: 12px;">
+            <span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">📥 IMPORTADOR OFX INTELIGENTE</span>
+            <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 2px; line-height: 1.3;">
+                Suba o arquivo <strong>.OFX</strong> baixado do app do seu banco (extrato de conta corrente ou fatura de cartão de crédito). O sistema lê todas as movimentações e atualiza o saldo ou fatura correspondente automaticamente!
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        if st.form_submit_button("Confirmar Lançamento"):
-            adicionar_transacao(datetime.now().strftime("%d/%m %H:%M"), desc, val, cat, banco, meio, tipo)
-            st.success("Transação registrada com sucesso!")
-            st.rerun()
+        tipo_ofx = st.selectbox(
+            "Tipo de Arquivo OFX:", 
+            ["💳 Fatura de Cartão de Crédito", "🏦 Extrato de Conta Corrente"],
+            key="sel_tipo_ofx"
+        )
+        
+        # Filtra bancos pertinentes
+        if "Cartão" in tipo_ofx:
+            bancos_ofx = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
+            if not bancos_ofx:
+                bancos_ofx = df_bancos["banco"].tolist()
+        else:
+            bancos_ofx = df_bancos["banco"].tolist()
+            
+        banco_alvo = st.selectbox("Banco Pertencente:", bancos_ofx, key="banco_alvo_ofx")
+        
+        arquivo_ofx = st.file_uploader("Selecione o arquivo .OFX:", type=["ofx"], key="uploader_ofx")
+        
+        if arquivo_ofx is not None:
+            try:
+                raw_bytes = arquivo_ofx.read()
+                try:
+                    conteudo_ofx = raw_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    conteudo_ofx = raw_bytes.decode("latin-1", errors="replace")
+                    
+                transacoes_ofx, saldo_ledger = parse_ofx_content(conteudo_ofx)
+                
+                if not transacoes_ofx:
+                    st.warning("Nenhuma movimentação identificada no arquivo OFX. Verifique se o arquivo está no padrão bancário.")
+                else:
+                    # Totais do arquivo
+                    total_debitos = sum(abs(t["valor"]) for t in transacoes_ofx if t["valor"] < 0)
+                    total_creditos = sum(t["valor"] for t in transacoes_ofx if t["valor"] > 0)
+                    
+                    st.markdown(f"""
+                    <div style="background: #111a28; border: 1px solid #1c2a3d; border-radius: 12px; padding: 10px; margin: 10px 0;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: #ffffff;">📄 Resumo do Arquivo OFX:</span>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px;">
+                            <div style="background: #0c121c; padding: 6px 8px; border-radius: 8px;">
+                                <span style="font-size: 0.6rem; color: #94a3b8;">MOVIMENTAÇÕES</span>
+                                <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: #38bdf8;">{len(transacoes_ofx)} itens</div>
+                            </div>
+                            <div style="background: #0c121c; padding: 6px 8px; border-radius: 8px;">
+                                <span style="font-size: 0.6rem; color: #94a3b8;">{'TOTAL COMPRAS' if 'Cartão' in tipo_ofx else 'TOTAL DÉBITOS'}</span>
+                                <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: #f87171;">R$ {total_debitos:,.2f}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Opções de atualização
+                    if "Cartão" in tipo_ofx:
+                        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">Ações para o Cartão:</span>', unsafe_allow_html=True)
+                        atualizar_fatura = st.checkbox("Atualizar valor da Fatura deste Cartão com o total do OFX", value=True)
+                        atualizar_extrato_cc = st.checkbox("Gravar todas as compras individuais no Extrato Geral", value=True)
+                        
+                        valor_final_fatura = abs(saldo_ledger) if (saldo_ledger is not None and saldo_ledger != 0) else total_debitos
+                        st.caption(f"Valor a ser definido na fatura de **{banco_alvo}**: **R$ {valor_final_fatura:,.2f}**")
+                        
+                        if st.button("🚀 Processar e Alimentar Cartão", key="btn_proc_cartao_ofx"):
+                            conn = sqlite3.connect("financas.db")
+                            c = conn.cursor()
+                            
+                            if atualizar_fatura:
+                                # Atualiza fatura atual e recalcula limite liberado se aplicável
+                                c.execute("SELECT limite_cartao FROM contas_bancarias WHERE banco = ?", (banco_alvo,))
+                                r_b = c.fetchone()
+                                lim_total = r_b[0] if r_b else 0.0
+                                novo_liberado = max(0.0, lim_total - valor_final_fatura)
+                                c.execute("""
+                                    UPDATE contas_bancarias 
+                                    SET fatura_atual = ?, limite_liberado = ?
+                                    WHERE banco = ?
+                                """, (valor_final_fatura, novo_liberado, banco_alvo))
+                                
+                            if atualizar_extrato_cc:
+                                for tr in transacoes_ofx:
+                                    val_trn = abs(tr["valor"])
+                                    tipo_trn = "Saída" if tr["valor"] < 0 else "Entrada"
+                                    c.execute("""
+                                        INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo)
+                                        VALUES (?, ?, ?, 'OFX / Cartão', ?, 'Cartão de Crédito', ?)
+                                    """, (tr["data"], tr["descricao"], val_trn, banco_alvo, tipo_trn))
+                                    
+                            conn.commit()
+                            conn.close()
+                            st.success(f"Fatura e compras de {banco_alvo} alimentadas com sucesso pelo OFX!")
+                            st.rerun()
+                            
+                    else:
+                        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">Ações para a Conta Corrente:</span>', unsafe_allow_html=True)
+                        atualizar_saldo = st.checkbox("Atualizar Saldo em Conta deste Banco com o saldo do OFX", value=True)
+                        atualizar_extrato_conta = st.checkbox("Gravar movimentações no Extrato Geral", value=True)
+                        
+                        valor_final_saldo = saldo_ledger if saldo_ledger is not None else (total_creditos - total_debitos)
+                        st.caption(f"Saldo a ser definido na conta de **{banco_alvo}**: **R$ {valor_final_saldo:,.2f}**")
+                        
+                        if st.button("🚀 Processar e Alimentar Conta", key="btn_proc_conta_ofx"):
+                            conn = sqlite3.connect("financas.db")
+                            c = conn.cursor()
+                            
+                            if atualizar_saldo:
+                                c.execute("""
+                                    UPDATE contas_bancarias 
+                                    SET saldo_conta = ?
+                                    WHERE banco = ?
+                                """, (valor_final_saldo, banco_alvo))
+                                
+                            if atualizar_extrato_conta:
+                                for tr in transacoes_ofx:
+                                    val_trn = abs(tr["valor"])
+                                    tipo_trn = "Saída" if tr["valor"] < 0 else "Entrada"
+                                    c.execute("""
+                                        INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo)
+                                        VALUES (?, ?, ?, 'OFX / Conta', ?, 'Conta Corrente / Pix', ?)
+                                    """, (tr["data"], tr["descricao"], val_trn, banco_alvo, tipo_trn))
+                                    
+                            conn.commit()
+                            conn.close()
+                            st.success(f"Saldo e movimentações de {banco_alvo} atualizados com sucesso pelo OFX!")
+                            st.rerun()
+                            
+            except Exception as e:
+                st.error(f"Erro ao processar o arquivo OFX: {e}")
 
 with tab_ajustes:
     st.markdown('<div class="sec-header">Ajuste de Limites, Saldos & Cartões</div>', unsafe_allow_html=True)
