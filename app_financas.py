@@ -793,4 +793,164 @@ elif st.session_state.bloco_ativo == "previstos":
         c_origem = st.session_state.copiando_prev
         st.markdown("""
         <div style="background: #101c2e; border: 1px solid #a855f7; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
-            <span style="font-size: 0.82rem; font-weight: 800; color: #a855f7;">📋 Duplicar / Cop
+            <span style="font-size: 0.82rem; font-weight: 800; color: #a855f7;">📋 Duplicar / Copiar Lançamento para Outro Mês</span>
+        """, unsafe_allow_html=True)
+        with st.form("form_copiar_previsto"):
+            dt_base_copia = datetime.strptime(c_origem["data_prevista"], "%Y-%m-%d").date() + relativedelta(months=1)
+            c_cp1, c_cp2 = st.columns(2)
+            with c_cp1:
+                nova_data = st.date_input("Nova Data de Vencimento/Entrada", value=dt_base_copia)
+                novo_val = st.number_input("Valor Ajustado (R$)", min_value=0.01, value=float(c_origem["valor"]), step=10.0)
+            with c_cp2:
+                nova_desc = st.text_input("Descrição", value=c_origem["descricao"])
+                idx_banco_c = df_bancos["banco"].tolist().index(c_origem["banco"]) if c_origem["banco"] in df_bancos["banco"].tolist() else 0
+                novo_banco = st.selectbox("Banco", df_bancos["banco"].tolist(), index=idx_banco_c)
+            
+            c_salv_cp, c_canc_cp = st.columns(2)
+            with c_salv_cp:
+                if st.form_submit_button("📋 Confirmar e Lançar no Mês"):
+                    adicionar_previsto(nova_data.strftime("%Y-%m-%d"), nova_desc, novo_val, c_origem["categoria"], c_origem["tipo"], novo_banco, 1, c_origem.get("fixo", 0))
+                    st.session_state.copiando_prev = None
+                    st.success("Lançamento copiado com sucesso!")
+                    st.rerun()
+            with c_canc_cp:
+                if st.form_submit_button("✕ Cancelar"):
+                    st.session_state.copiando_prev = None
+                    st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # PAINEL DE EDIÇÃO
+    if st.session_state.editando_id is not None:
+        item_edit = df_prev[df_prev["id"] == st.session_state.editando_id]
+        if not item_edit.empty:
+            row_edit = item_edit.iloc[0]
+            st.markdown("""
+            <div style="background: #101c2e; border: 1px solid #38bdf8; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
+                <span style="font-size: 0.82rem; font-weight: 800; color: #38bdf8;">✏️ Editando Lançamento</span>
+            """, unsafe_allow_html=True)
+            with st.form("form_editar_previsto"):
+                e_data_base = datetime.strptime(row_edit["data_prevista"], "%Y-%m-%d").date()
+                c_e1, c_e2 = st.columns(2)
+                with c_e1:
+                    e_data = st.date_input("Data do Lançamento", value=e_data_base)
+                    e_tipo = st.selectbox("Tipo de Operação", ["Entrada", "Saída"], index=0 if row_edit["tipo"] == "Entrada" else 1)
+                    e_valor = st.number_input("Valor (R$)", min_value=0.01, value=float(row_edit["valor"]), step=50.0)
+                with c_e2:
+                    e_desc = st.text_input("Descrição", value=row_edit["descricao"])
+                    idx_banco = df_bancos["banco"].tolist().index(row_edit["banco"]) if row_edit["banco"] in df_bancos["banco"].tolist() else 0
+                    e_banco = st.selectbox("Banco", df_bancos["banco"].tolist(), index=idx_banco)
+                    cats = ["Renda", "Salário", "Fatura", "Contas Fixas", "Lazer", "Outros"]
+                    idx_cat = cats.index(row_edit["categoria"]) if row_edit["categoria"] in cats else 0
+                    e_cat = st.selectbox("Categoria", cats, index=idx_cat)
+                
+                e_fixo = st.checkbox("Fixar este lançamento (Renda/Gasto Recorrente)", value=bool(row_edit.get("fixo", 0)))
+                
+                c_salv, c_canc = st.columns(2)
+                with c_salv:
+                    if st.form_submit_button("💾 Salvar Alterações"):
+                        atualizar_previsto(row_edit["id"], e_data.strftime("%Y-%m-%d"), e_desc, e_valor, e_cat, e_tipo, e_banco, 1 if e_fixo else 0)
+                        st.session_state.editando_id = None
+                        st.success("Lançamento atualizado com sucesso!")
+                        st.rerun()
+                with c_canc:
+                    if st.form_submit_button("✕ Cancelar Edição"):
+                        st.session_state.editando_id = None
+                        st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    # Alternar exibição do Formulário
+    btn_txt = "➖ Ocultar Formulário" if st.session_state.mostrar_form_prev else "➕ Agendar Novo Lançamento"
+    if st.button(btn_txt, key="toggle_form_prev"):
+        st.session_state.mostrar_form_prev = not st.session_state.mostrar_form_prev
+        st.rerun()
+
+    if st.session_state.mostrar_form_prev:
+        with st.form("form_add_previsto"):
+            st.markdown('<div style="font-size: 0.75rem; font-weight: 700; color: #38bdf8; margin-bottom: 8px;">Dados do Lançamento Futuro:</div>', unsafe_allow_html=True)
+            c_p1, c_p2 = st.columns(2)
+            with c_p1:
+                data_sel = st.date_input("Data de Início", value=date.today())
+                tipo_prev = st.selectbox("Tipo de Operação", ["Entrada", "Saída"])
+                valor_prev = st.number_input("Valor Estimado (R$)", min_value=0.01, value=1500.00, step=50.0)
+            with c_p2:
+                desc_prev = st.text_input("Descrição", value="Salário / Pix / Boleto")
+                banco_prev = st.selectbox("Banco Envolvido", df_bancos["banco"].tolist())
+                cat_prev = st.selectbox("Categoria", ["Renda", "Salário", "Fatura", "Contas Fixas", "Lazer", "Outros"])
+            
+            st.markdown('<div style="margin-top: 6px; padding: 8px; background: #0d1522; border-radius: 10px; border: 1px solid #1a273b;">', unsafe_allow_html=True)
+            fixo_check = st.checkbox("📌 Fixar Renda/Gasto Recorrente (Mesmo dia todos os meses)")
+            meses_qtd = st.slider("Repetir por quantos meses consecutivos?", min_value=1, max_value=12, value=1)
+            st.caption("Exemplo: replique por vários meses e copie despesas variáveis conforme necessário.")
+            st.markdown('</div>', unsafe_allow_html=True)
+                
+            if st.form_submit_button("💾 Confirmar Agendamento"):
+                adicionar_previsto(
+                    data_sel.strftime("%Y-%m-%d"), 
+                    desc_prev, 
+                    valor_prev, 
+                    cat_prev, 
+                    tipo_prev, 
+                    banco_prev, 
+                    meses_repetir=meses_qtd,
+                    fixo=1 if fixo_check else 0
+                )
+                st.session_state.mostrar_form_prev = False
+                st.success(f"Previsão agendada com sucesso para {meses_qtd} mês(es)!")
+                st.rerun()
+
+    # Lista de Previsões Agendadas
+    st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Previsões no Calendário:</div>', unsafe_allow_html=True)
+    if df_prev.empty:
+        st.info("Nenhuma previsão agendada. Toque no botão acima para adicionar uma nova.")
+    else:
+        for idx, row_p in df_prev.iterrows():
+            is_ent = row_p["tipo"] == "Entrada"
+            sinal_p = "+" if is_ent else "-"
+            cor_p = "#4ade80" if is_ent else "#f87171"
+            tag_fixo = " • 📌 Fixa" if row_p.get("fixo", 0) == 1 else ""
+            
+            col_info, col_botoes = st.columns([3.4, 2.6])
+            with col_info:
+                st.markdown(f"""
+                <div class="prev-item-card" style="margin-bottom: 6px;">
+                    <div>
+                        <div style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">{row_p['descricao']}</div>
+                        <div style="font-size: 0.63rem; color: #94a3b8;">📅 {row_p['data_prevista']} • {row_p['banco']}{tag_fixo}</div>
+                    </div>
+                    <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.85rem; color: {cor_p}; text-align: right;">
+                        {sinal_p} R$ {row_p['valor']:,.2f}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_botoes:
+                c_cp, c_ed, c_del = st.columns(3)
+                with c_cp:
+                    st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
+                    if st.button("📋", key=f"btn_cp_{row_p['id']}", help="Copiar esta despesa/renda para outro mês"):
+                        st.session_state.copiando_prev = row_p.to_dict()
+                        st.session_state.editando_id = None
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with c_ed:
+                    st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
+                    if st.button("✏️", key=f"btn_edit_{row_p['id']}", help="Editar este lançamento"):
+                        st.session_state.editando_id = row_p["id"]
+                        st.session_state.copiando_prev = None
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with c_del:
+                    st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
+                    if st.button("🗑️", key=f"del_p_{row_p['id']}", help="Remover esta previsão"):
+                        remover_previsto(row_p["id"])
+                        if st.session_state.editando_id == row_p["id"]:
+                            st.session_state.editando_id = None
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif st.session_state.bloco_ativo == "advisor":
+    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
+    c_tit, c_fech = st.columns([5, 1])
+    with c_tit:
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">🧠 Advisor • Diagnóstico de Saúde Financeira</span>', unsafe_allow_html=True)
+    with c
