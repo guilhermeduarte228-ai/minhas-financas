@@ -114,21 +114,21 @@ st.markdown("""
         color: #94a3b8;
     }
 
-    /* Botões de Recursos Rápidos */
-    div[data-testid="column"] button {
+    /* Botões de Recursos Rápidos (Pílulas / Tiles) */
+    .recursos-wrapper div[data-testid="column"] button {
         background: #141d2a !important;
         border: 1px solid #223247 !important;
         border-radius: 14px !important;
         color: #f1f5f9 !important;
-        font-size: 0.72rem !important;
+        font-size: 0.7rem !important;
         font-weight: 700 !important;
-        padding: 0.55rem 0.1rem !important;
-        min-height: 48px !important;
+        padding: 0.5rem 0.1rem !important;
+        min-height: 46px !important;
         box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
         transition: all 0.2s ease !important;
         white-space: nowrap !important;
     }
-    div[data-testid="column"] button:hover {
+    .recursos-wrapper div[data-testid="column"] button:hover {
         border-color: #38bdf8 !important;
         color: #38bdf8 !important;
         transform: translateY(-1px) !important;
@@ -212,6 +212,18 @@ st.markdown("""
         margin-bottom: 1.4rem;
     }
 
+    /* Card Item de Previsão */
+    .prev-item-card {
+        background: #0d1522;
+        border: 1px solid #1a273b;
+        border-radius: 12px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
     /* Insight Card */
     .insight-card {
         background: #0d1522;
@@ -271,6 +283,21 @@ st.markdown("""
         font-size: 0.86rem !important;
         padding: 0.7rem 1rem !important;
     }
+
+    /* Botão de Limpar / Danger */
+    .btn-clear button {
+        background: rgba(239, 68, 68, 0.12) !important;
+        color: #f87171 !important;
+        border: 1px solid rgba(239, 68, 68, 0.35) !important;
+        border-radius: 10px !important;
+        font-size: 0.72rem !important;
+        font-weight: 700 !important;
+        padding: 0.4rem 0.8rem !important;
+    }
+    .btn-clear button:hover {
+        background: rgba(239, 68, 68, 0.25) !important;
+        border-color: #f87171 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -316,8 +343,14 @@ def init_db():
             dia_fechamento INTEGER DEFAULT 3
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS app_config (
+            chave TEXT PRIMARY KEY,
+            valor TEXT
+        )
+    """)
     
-    # Migrações: Inter -> Itaú e cor do Mercado Pago Amarela
+    # Migrações seguras
     c.execute("UPDATE contas_bancarias SET banco = 'Itaú', cor_identificador = '#ec7000' WHERE banco = 'Inter'")
     c.execute("UPDATE transacoes SET banco = 'Itaú' WHERE banco = 'Inter'")
     c.execute("UPDATE contas_bancarias SET cor_identificador = '#ffe600' WHERE banco = 'Mercado Pago'")
@@ -337,18 +370,19 @@ def init_db():
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, bancos_dados)
     
-    c.execute("SELECT COUNT(*) FROM lancamentos_previstos")
-    if c.fetchone()[0] == 0:
+    # Inicializa flag de primeiro setup para NUNCA mais recriar previsões se o usuário tiver excluído!
+    c.execute("SELECT valor FROM app_config WHERE chave = 'previstos_iniciados'")
+    flag = c.fetchone()
+    if not flag:
         previstos_ex = [
             (datetime.now().strftime("%Y-%m-05"), "Salário / Rendimentos", 4500.00, "Renda", "Entrada", "Itaú"),
             (datetime.now().strftime("%Y-%m-10"), "Fatura de Cartão", 1954.00, "Fatura", "Saída", "Nubank"),
-            (datetime.now().strftime("%Y-%m-15"), "Freelance / Extra", 800.00, "Renda", "Entrada", "Mercado Pago"),
-            (datetime.now().strftime("%Y-%m-20"), "Aluguel & Contas", 1400.00, "Contas Fixas", "Saída", "Caixa Econômica")
         ]
         c.executemany("""
             INSERT INTO lancamentos_previstos (data_prevista, descricao, valor, categoria, tipo, banco)
             VALUES (?, ?, ?, ?, ?, ?)
         """, previstos_ex)
+        c.execute("INSERT INTO app_config (chave, valor) VALUES ('previstos_iniciados', '1')")
 
     conn.commit()
     conn.close()
@@ -387,6 +421,27 @@ def remover_previsto(id_prev):
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("DELETE FROM lancamentos_previstos WHERE id = ?", (id_prev,))
+    conn.commit()
+    conn.close()
+
+def limpar_todas_previsoes():
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM lancamentos_previstos")
+    conn.commit()
+    conn.close()
+
+def limpar_extrato_completo():
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM transacoes")
+    conn.commit()
+    conn.close()
+
+def zerar_saldos_e_faturas():
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("UPDATE contas_bancarias SET fatura_atual = 0.0, saldo_conta = 0.0, cheque_especial_usado = 0.0")
     conn.commit()
     conn.close()
 
@@ -453,6 +508,9 @@ msg_total, classe_total = get_status_saldo(total_saldos)
 if "bloco_ativo" not in st.session_state:
     st.session_state.bloco_ativo = "previstos"
 
+if "mostrar_form_prev" not in st.session_state:
+    st.session_state.mostrar_form_prev = False
+
 # Barra Superior
 st.markdown("""
 <div class="md-header">
@@ -482,45 +540,56 @@ st.markdown(f"""
 
 # RECURSOS RÁPIDOS
 st.markdown('<div class="sec-header">Recursos Rápidos</div>', unsafe_allow_html=True)
+st.markdown('<div class="recursos-wrapper">', unsafe_allow_html=True)
 col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
-    if st.button("📅 Previsões", key="btn_prev", help="Lançamentos futuros, salários e comparativo"):
+    if st.button("📅 Previsões", key="btn_prev"):
         st.session_state.bloco_ativo = "previstos" if st.session_state.bloco_ativo != "previstos" else None
 
 with col2:
-    if st.button("🧠 Advisor", key="btn_adv", help="Diagnóstico e orientações inteligentes"):
+    if st.button("🧠 Advisor", key="btn_adv"):
         st.session_state.bloco_ativo = "advisor" if st.session_state.bloco_ativo != "advisor" else None
 
 with col3:
-    if st.button("💳 Venc.", key="btn_venc", help="Configurar datas de vencimento das faturas"):
+    if st.button("💳 Venc.", key="btn_venc"):
         st.session_state.bloco_ativo = "vencimentos" if st.session_state.bloco_ativo != "vencimentos" else None
 
 with col4:
-    if st.button("📊 Gráficos", key="btn_graf", help="Gráficos dinâmicos de gastos"):
+    if st.button("📊 Gráficos", key="btn_graf"):
         st.session_state.bloco_ativo = "graficos" if st.session_state.bloco_ativo != "graficos" else None
 
 with col5:
-    if st.button("⚖️ Limites", key="btn_lim", help="Visualizar cheque especial e limites"):
+    if st.button("⚖️ Limites", key="btn_lim"):
         st.session_state.bloco_ativo = "limites" if st.session_state.bloco_ativo != "limites" else None
+st.markdown('</div>', unsafe_allow_html=True)
 
-# ÁREA DINÂMICA
+# ================= ÁREA DINÂMICA =================
 if st.session_state.bloco_ativo == "previstos":
     entradas_previstas = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() if not df_prev.empty else 0.0
     saidas_previstas = df_prev[df_prev["tipo"] == "Saída"]["valor"].sum() if not df_prev.empty else 0.0
     saldo_projetado = total_saldos + entradas_previstas - saidas_previstas
     
-    st.markdown("""
-    <div class="panel-box">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📅 Lançamentos Previstos & Comparativo</span>
-            <span style="font-size: 0.65rem; color: #94a3b8;">Projeção Futura</span>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
     
+    # Barra de controle do painel
+    c_tit, c_limp, c_fech = st.columns([3, 2, 1])
+    with c_tit:
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📅 Lançamentos Previstos</span>', unsafe_allow_html=True)
+    with c_limp:
+        st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+        if st.button("🗑️ Limpar Todos", key="btn_limpar_prev", help="Apaga todas as previsões agendadas"):
+            limpar_todas_previsoes()
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    with c_fech:
+        if st.button("✕", key="fechar_prev", help="Recolher painel"):
+            st.session_state.bloco_ativo = None
+            st.rerun()
+
     # COMPARATIVO ATUAL VS PROJETADO
     st.markdown(f"""
-    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
+    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 10px 0 14px 0;">
         <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Comparativo: Atual vs. Projetado</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
             <div style="background: #111a28; padding: 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
@@ -541,34 +610,44 @@ if st.session_state.bloco_ativo == "previstos":
     </div>
     """, unsafe_allow_html=True)
     
-    # Formulário com Calendário Interativo
-    with st.expander("➕ Agendar Novo Lançamento Previsto", expanded=False):
-        c_p1, c_p2 = st.columns(2)
-        with c_p1:
-            data_sel = st.date_input("Data Prevista", value=date.today())
-            tipo_prev = st.selectbox("Tipo de Operação", ["Entrada", "Saída"])
-            valor_prev = st.number_input("Valor Estimado (R$)", min_value=0.01, value=1500.00, step=50.0)
-        with c_p2:
-            desc_prev = st.text_input("Descrição", value="Salário / Pix / Conta")
-            banco_prev = st.selectbox("Banco Destino/Origem", df_bancos["banco"].tolist())
-            cat_prev = st.selectbox("Categoria", ["Renda", "Salário", "Fatura", "Contas Fixas", "Lazer", "Outros"])
-            
-        if st.button("Salvar Previsão no Calendário"):
-            adicionar_previsto(data_sel.strftime("%Y-%m-%d"), desc_prev, valor_prev, cat_prev, tipo_prev, banco_prev)
-            st.success("Lançamento previsto registrado com sucesso!")
-            st.rerun()
+    # Botão para alternar exibição do Formulário
+    btn_txt = "➖ Ocultar Formulário" if st.session_state.mostrar_form_prev else "➕ Agendar Novo Lançamento"
+    if st.button(btn_txt, key="toggle_form_prev"):
+        st.session_state.mostrar_form_prev = not st.session_state.mostrar_form_prev
+        st.rerun()
+
+    if st.session_state.mostrar_form_prev:
+        with st.form("form_add_previsto"):
+            st.markdown('<div style="font-size: 0.75rem; font-weight: 700; color: #38bdf8; margin-bottom: 8px;">Dados do Lançamento Futuro:</div>', unsafe_allow_html=True)
+            c_p1, c_p2 = st.columns(2)
+            with c_p1:
+                data_sel = st.date_input("Data Prevista", value=date.today())
+                tipo_prev = st.selectbox("Tipo de Operação", ["Entrada", "Saída"])
+                valor_prev = st.number_input("Valor Estimado (R$)", min_value=0.01, value=1500.00, step=50.0)
+            with c_p2:
+                desc_prev = st.text_input("Descrição", value="Salário / Pix / Boleto")
+                banco_prev = st.selectbox("Banco Envolvido", df_bancos["banco"].tolist())
+                cat_prev = st.selectbox("Categoria", ["Renda", "Salário", "Fatura", "Contas Fixas", "Lazer", "Outros"])
+                
+            if st.form_submit_button("💾 Confirmar Agendamento"):
+                adicionar_previsto(data_sel.strftime("%Y-%m-%d"), desc_prev, valor_prev, cat_prev, tipo_prev, banco_prev)
+                st.session_state.mostrar_form_prev = False
+                st.success("Previsão salva com sucesso!")
+                st.rerun()
 
     # Lista de Previsões Agendadas
-    if not df_prev.empty:
-        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 10px 0 6px 0;">Previsões no Calendário:</div>', unsafe_allow_html=True)
-        for _, row_p in df_prev.iterrows():
+    st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Previsões no Calendário:</div>', unsafe_allow_html=True)
+    if df_prev.empty:
+        st.info("Nenhuma previsão agendada. Toque no botão acima para adicionar uma nova.")
+    else:
+        for idx, row_p in df_prev.iterrows():
             is_ent = row_p["tipo"] == "Entrada"
             sinal_p = "+" if is_ent else "-"
             cor_p = "#4ade80" if is_ent else "#f87171"
-            col_info, col_del = st.columns([5, 1])
+            col_info, col_del = st.columns([4.8, 1.2])
             with col_info:
                 st.markdown(f"""
-                <div style="background: #0d1522; border: 1px solid #1a273b; border-radius: 10px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                <div class="prev-item-card">
                     <div>
                         <div style="font-size: 0.8rem; font-weight: 700; color: #ffffff;">{row_p['descricao']}</div>
                         <div style="font-size: 0.65rem; color: #94a3b8;">📅 {row_p['data_prevista']} • {row_p['banco']} ({row_p['categoria']})</div>
@@ -579,23 +658,25 @@ if st.session_state.bloco_ativo == "previstos":
                 </div>
                 """, unsafe_allow_html=True)
             with col_del:
-                if st.button("🗑️", key=f"del_prev_{row_p['id']}", help="Excluir previsão"):
+                st.markdown('<div class="btn-clear" style="margin-top: 6px;">', unsafe_allow_html=True)
+                if st.button("Excluir", key=f"del_p_{row_p['id']}", help="Remover esta previsão"):
                     remover_previsto(row_p["id"])
                     st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "advisor":
-    st.markdown("""
-    <div class="panel-box">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">🧠 Advisor • Diagnóstico de Saúde Financeira</span>
-            <span style="font-size: 0.65rem; color: #94a3b8;">Análise Inteligente</span>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
+    c_tit, c_fech = st.columns([5, 1])
+    with c_tit:
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">🧠 Advisor • Diagnóstico de Saúde Financeira</span>', unsafe_allow_html=True)
+    with c_fech:
+        if st.button("✕", key="fechar_adv"):
+            st.session_state.bloco_ativo = None
+            st.rerun()
     
     diagnosticos = []
     
-    # 1. Cheque Especial
     if total_cheque > 0:
         diagnosticos.append({
             "titulo": "⚠️ Alerta Crítico: Cheque Especial Ativo",
@@ -609,7 +690,6 @@ elif st.session_state.bloco_ativo == "advisor":
             "desc": "Parabéns! Nenhuma das suas contas bancárias está consumindo limite emergencial ou pagando juros abusivos."
         })
         
-    # 2. Relação Fatura vs. Saldo
     if total_saldos < total_faturas:
         deficit = total_faturas - total_saldos
         diagnosticos.append({
@@ -625,7 +705,6 @@ elif st.session_state.bloco_ativo == "advisor":
             "desc": f"Seu saldo disponível quita 100% das suas faturas atuais e ainda sobram R$ {folga:,.2f} livres em caixa."
         })
         
-    # 3. Concentração de Cartão
     if not df_bancos.empty:
         maior_fatura = df_bancos.sort_values(by="fatura_atual", ascending=False).iloc[0]
         if maior_fatura["fatura_atual"] > 0:
@@ -637,7 +716,6 @@ elif st.session_state.bloco_ativo == "advisor":
                     "desc": f"{maior_fatura['banco']} representa {pct_maior:.0f}% de toda a sua fatura consolidada. Centralizar gastos ajuda a pontuar, mas exige atenção redobrada à data de fechamento para não embolar compras em meses subsequentes."
                 })
 
-    # 4. Regra de Ouro / Indicação Inteligente
     diagnosticos.append({
         "titulo": "💡 Regra dos 3 Dias de Antecedência",
         "tipo": "info",
@@ -660,13 +738,14 @@ elif st.session_state.bloco_ativo == "advisor":
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "vencimentos":
-    st.markdown("""
-    <div class="panel-box">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <span style="font-weight: 800; color: #38bdf8; font-size: 0.9rem;">💳 Vencimento & Fechamento das Faturas</span>
-            <span style="font-size: 0.65rem; color: #94a3b8;">Configuração Rápida</span>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
+    c_tit, c_fech = st.columns([5, 1])
+    with c_tit:
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.9rem;">💳 Vencimento & Fechamento das Faturas</span>', unsafe_allow_html=True)
+    with c_fech:
+        if st.button("✕", key="fechar_venc"):
+            st.session_state.bloco_ativo = None
+            st.rerun()
     
     banco_venc = st.selectbox("Selecione o Cartão para Configurar", df_bancos["banco"].tolist(), key="sel_banco_venc")
     info_banco = df_bancos[df_bancos["banco"] == banco_venc].iloc[0]
@@ -684,12 +763,14 @@ elif st.session_state.bloco_ativo == "vencimentos":
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "graficos":
-    st.markdown("""
-    <div class="panel-box">
-        <div style="font-weight: 800; color: #38bdf8; font-size: 0.9rem; margin-bottom: 10px;">
-            📊 Análise Dinâmica dos Seus Gastos
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
+    c_tit, c_fech = st.columns([5, 1])
+    with c_tit:
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.9rem;">📊 Análise Dinâmica dos Seus Gastos</span>', unsafe_allow_html=True)
+    with c_fech:
+        if st.button("✕", key="fechar_graf"):
+            st.session_state.bloco_ativo = None
+            st.rerun()
     
     df_gastos = df_tx[df_tx["tipo"] == "Saída"]
     
@@ -711,12 +792,15 @@ elif st.session_state.bloco_ativo == "graficos":
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "limites":
-    st.markdown("""
-    <div class="panel-box">
-        <div style="font-weight: 800; color: #38bdf8; font-size: 0.9rem; margin-bottom: 10px;">
-            ⚖️ Diagnóstico de Limites & Cheque Especial
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
+    c_tit, c_fech = st.columns([5, 1])
+    with c_tit:
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.9rem;">⚖️ Diagnóstico de Limites & Cheque Especial</span>', unsafe_allow_html=True)
+    with c_fech:
+        if st.button("✕", key="fechar_lim"):
+            st.session_state.bloco_ativo = None
+            st.rerun()
+            
     total_lim_cartao = df_bancos["limite_cartao"].sum()
     total_disp_cartao = max(0.0, total_lim_cartao - total_faturas)
     
@@ -785,9 +869,18 @@ with tab_bancos:
         """, unsafe_allow_html=True)
 
 with tab_extrato:
-    st.markdown('<div class="sec-header">Histórico Geral de Lançamentos</div>', unsafe_allow_html=True)
+    c_ext_t, c_ext_b = st.columns([3.5, 1.5])
+    with c_ext_t:
+        st.markdown('<div class="sec-header" style="margin-top: 0.5rem;">Histórico Geral</div>', unsafe_allow_html=True)
+    with c_ext_b:
+        st.markdown('<div class="btn-clear" style="margin-top: 0.3rem;">', unsafe_allow_html=True)
+        if st.button("🗑️ Limpar Extrato", key="btn_limpar_extrato_aba"):
+            limpar_extrato_completo()
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
     if df_tx.empty:
-        st.info("Nenhuma transação registrada.")
+        st.info("Nenhuma transação registrada no extrato.")
     else:
         for _, row in df_tx.iterrows():
             is_saida = row["tipo"] == "Saída"
@@ -823,6 +916,15 @@ with tab_novo:
 
 with tab_ajustes:
     st.markdown('<div class="sec-header">Ajuste de Limites, Saldos & Datas</div>', unsafe_allow_html=True)
+    
+    # Botão de Zerar Tudo
+    st.markdown('<div class="btn-clear" style="margin-bottom: 12px;">', unsafe_allow_html=True)
+    if st.button("⚠️ Zerar Todos os Saldos e Faturas", key="btn_zerar_saldos_tudo"):
+        zerar_saldos_e_faturas()
+        st.success("Saldos e faturas zerados!")
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     banco_edit = st.selectbox("Selecione o Banco", df_bancos["banco"].tolist())
     row_banco = df_bancos[df_bancos["banco"] == banco_edit].iloc[0]
     
