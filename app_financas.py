@@ -350,7 +350,7 @@ def init_db():
         )
     """)
     
-    # Migrações seguras
+    # Migrações seguras: Inter -> Itaú e Mercado Pago Amarelo
     c.execute("UPDATE contas_bancarias SET banco = 'Itaú', cor_identificador = '#ec7000' WHERE banco = 'Inter'")
     c.execute("UPDATE transacoes SET banco = 'Itaú' WHERE banco = 'Inter'")
     c.execute("UPDATE contas_bancarias SET cor_identificador = '#ffe600' WHERE banco = 'Mercado Pago'")
@@ -964,7 +964,7 @@ elif st.session_state.bloco_ativo == "advisor":
         diagnosticos.append({
             "titulo": "⚠️ Alerta Crítico: Cheque Especial Ativo",
             "tipo": "danger",
-            "desc": f"Você está utilizando R$ {total_cheque:,.2f} do limite emergencial. Priorize destinar os reembolsos KM para abater esse valor e estancar os juros."
+            "desc": f"Você está utilizando R$ {total_cheque:,.2f} do limite emergencial. Use o botão ⛽ Destinar para abater o cheque especial assim que receber reembolsos de gasolina da empresa."
         })
     else:
         diagnosticos.append({
