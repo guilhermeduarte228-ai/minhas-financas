@@ -1109,15 +1109,15 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
 
     st.markdown("""
     <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 10px 0 14px 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Como funciona o rateio de reembolso:</div>
+        <div style="font-size: 0.72rem; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Rateio Flexível de Reembolso:</div>
         <div style="font-size: 0.68rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;">
-            Recebeu o reembolso da empresa? Digite o valor total que caiu e <strong>distribua diretamente para onde o dinheiro deve ir</strong>. O app abate automaticamente a fatura do cartão usado no pedágio, repõe o cheque especial usado no combustível e deixa o lucro das diárias (R$ 100/dia) livre na conta!
+            Digite o valor total recebido e <strong>escolha exatamente quantos destinos</strong> você quer (1, 2, 3 ou mais). O app só abate e lança nas contas e faturas que você definir!
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Botão de toggle sem bug de fontes
-    btn_calc_label = "➖ Ocultar Calculadora de Estimativa" if st.session_state.mostrar_calc_km else "🧮 Abrir Calculadora de Estimativa (R$ 130/dia + Pedágios)"
+    # Botão de toggle para calculadora de estimativa
+    btn_calc_label = "➖ Ocultar Calculadora" if st.session_state.mostrar_calc_km else "🧮 Calculadora de Estimativa (R$ 130/dia + Pedágios)"
     if st.button(btn_calc_label, key="toggle_calc_km"):
         st.session_state.mostrar_calc_km = not st.session_state.mostrar_calc_km
         st.rerun()
@@ -1139,6 +1139,24 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
             st.markdown(f"**Total Esperado:** <span style='color: #4ade80; font-weight: 800;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # Escolha de quantos destinos o usuário quer configurar
+    if "qtd_destinos" not in st.session_state:
+        st.session_state.qtd_destinos = 2
+
+    c_sel_q1, c_sel_q2 = st.columns([2.5, 1.5])
+    with c_sel_q1:
+        st.markdown('<div style="font-size: 0.78rem; font-weight: 700; color: #ffffff; padding-top: 8px;">Quantos destinos quer ratear?</div>', unsafe_allow_html=True)
+    with c_sel_q2:
+        qtd_escolhida = st.selectbox(
+            "Qtd", 
+            [1, 2, 3, 4, 5], 
+            index=[1, 2, 3, 4, 5].index(st.session_state.qtd_destinos),
+            label_visibility="collapsed"
+        )
+        if qtd_escolhida != st.session_state.qtd_destinos:
+            st.session_state.qtd_destinos = qtd_escolhida
+            st.rerun()
+
     with st.form("form_rateio_reembolso"):
         st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #ffffff; margin-bottom: 8px;">1. Entrada Total de Reembolso Recebido:</div>', unsafe_allow_html=True)
         c_v1, c_v2 = st.columns(2)
@@ -1147,55 +1165,75 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
         with c_v2:
             valor_total_recebido = st.number_input("Valor Total que Caiu (R$)", min_value=0.01, value=778.00, step=20.0)
 
-        st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">2. Destinar o Valor para Abates e Saldo:</div>', unsafe_allow_html=True)
-        st.caption("Distribua o dinheiro. O valor é descontado imediatamente na fatura/cheque selecionado:")
+        st.markdown(f'<div style="font-size: 0.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">2. Configurar os {st.session_state.qtd_destinos} Destino(s):</div>', unsafe_allow_html=True)
+        st.caption("Preencha cada destino. O que tiver valor R$ 0,00 ou estiver zerado será ignorado:")
 
-        # Destino A (Layout espaçado em 2 colunas para nunca cortar texto)
-        st.markdown('<div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">', unsafe_allow_html=True)
-        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">🎯 Destino A (Ex: Pedágio no Cartão)</span>', unsafe_allow_html=True)
-        c_a1, c_a2 = st.columns(2)
-        with c_a1:
-            banco_a = st.selectbox("Banco", df_bancos["banco"].tolist(), index=df_bancos["banco"].tolist().index("Nubank") if "Nubank" in df_bancos["banco"].tolist() else 0, key="b_a")
-        with c_a2:
-            val_a = st.number_input("Valor (R$)", min_value=0.0, value=128.00, step=10.0, key="v_a")
-        acao_a = st.selectbox("Ação a Executar", ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], index=0, key="ac_a")
-        motivo_a = st.text_input("Identificação / Motivo", value="Pedágio da semana (Cartão de Crédito)", key="m_a")
-        st.markdown('</div>', unsafe_allow_html=True)
+        destinos_coletados = []
+        bancos_list = df_bancos["banco"].tolist()
+        cores_letras = ["#38bdf8", "#fbbf24", "#4ade80", "#a855f7", "#f43f5e"]
+        letras = ["A", "B", "C", "D", "E"]
+        sugestoes_motivos = [
+            "Pedágio no Cartão de Crédito",
+            "Gasolina no Cheque Especial",
+            "Renda livre / Lucro das diárias",
+            "Outro gasto / Ajuste",
+            "Reserva / Poupança"
+        ]
 
-        # Destino B
-        st.markdown('<div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">', unsafe_allow_html=True)
-        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #fbbf24;">🎯 Destino B (Ex: Repor Gasolina no Cheque Especial)</span>', unsafe_allow_html=True)
-        c_b1, c_b2 = st.columns(2)
-        with c_b1:
-            banco_b = st.selectbox("Banco", df_bancos["banco"].tolist(), index=df_bancos["banco"].tolist().index("Bradesco") if "Bradesco" in df_bancos["banco"].tolist() else 0, key="b_b")
-        with c_b2:
-            val_b = st.number_input("Valor (R$)", min_value=0.0, value=150.00, step=10.0, key="v_b")
-        acao_b = st.selectbox("Ação a Executar", ["Abater Cheque Especial", "Pagar/Abater Fatura de Cartão", "Creditar em Conta Corrente"], index=0, key="ac_b")
-        motivo_b = st.text_input("Identificação / Motivo", value="Gasolina tirada do Cheque Especial", key="m_b")
-        st.markdown('</div>', unsafe_allow_html=True)
+        for idx_d in range(st.session_state.qtd_destinos):
+            letra = letras[idx_d]
+            cor = cores_letras[idx_d % len(cores_letras)]
+            sugestao_banco = idx_d if idx_d < len(bancos_list) else 0
+            
+            st.markdown(f"""
+            <div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.72rem; font-weight: 700; color: {cor};">🎯 Destino {letra}</span>
+            """, unsafe_allow_html=True)
+            
+            c_d1, c_d2 = st.columns(2)
+            with c_d1:
+                banco_d = st.selectbox(f"Banco ({letra})", bancos_list, index=sugestao_banco, key=f"b_{letra}")
+            with c_d2:
+                # Sugere valor proporcional ou restante
+                val_padrao = 0.0
+                if idx_d == 0 and st.session_state.qtd_destinos == 1:
+                    val_padrao = float(valor_total_recebido)
+                elif idx_d == 0:
+                    val_padrao = 150.0
+                elif idx_d == 1 and st.session_state.qtd_destinos == 2:
+                    val_padrao = float(max(0.0, valor_total_recebido - 150.0))
+                val_d = st.number_input(f"Valor R$ ({letra})", min_value=0.0, value=val_padrao, step=10.0, key=f"v_{letra}")
 
-        # Destino C
-        sobra_lucro = max(0.0, valor_total_recebido - (val_a + val_b))
-        st.markdown('<div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">', unsafe_allow_html=True)
-        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #4ade80;">🎯 Destino C (Ex: Renda Livre das Diárias de R$ 100)</span>', unsafe_allow_html=True)
-        c_c1, c_c2 = st.columns(2)
-        with c_c1:
-            banco_c = st.selectbox("Banco", df_bancos["banco"].tolist(), index=df_bancos["banco"].tolist().index("Itaú") if "Itaú" in df_bancos["banco"].tolist() else 0, key="b_c")
-        with c_c2:
-            val_c = st.number_input("Valor (R$)", min_value=0.0, value=float(sobra_lucro), step=10.0, key="v_c")
-        acao_c = st.selectbox("Ação a Executar", ["Creditar em Conta Corrente", "Pagar/Abater Fatura de Cartão", "Abater Cheque Especial"], index=0, key="ac_c")
-        motivo_c = st.text_input("Identificação / Motivo", value="Renda livre das diárias alocadas", key="m_c")
-        st.markdown('</div>', unsafe_allow_html=True)
+            acao_d = st.selectbox(
+                f"Ação ({letra})", 
+                ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], 
+                index=0 if idx_d == 0 else (1 if idx_d == 1 else 2), 
+                key=f"ac_{letra}"
+            )
+            motivo_d = st.text_input(
+                f"Identificação / Motivo ({letra})", 
+                value=sugestoes_motivos[idx_d % len(sugestoes_motivos)], 
+                key=f"m_{letra}"
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            destinos_coletados.append({
+                "banco": banco_d,
+                "acao": acao_d,
+                "valor": val_d,
+                "motivo": motivo_d
+            })
 
         if st.form_submit_button("🚀 Executar Entrada & Destinar Automaticamente"):
-            destinos = [
-                {"banco": banco_a, "acao": acao_a, "valor": val_a, "motivo": motivo_a},
-                {"banco": banco_b, "acao": acao_b, "valor": val_b, "motivo": motivo_b},
-                {"banco": banco_c, "acao": acao_c, "valor": val_c, "motivo": motivo_c}
-            ]
-            aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), valor_total_recebido, destinos)
-            st.success("Reembolso distribuído com sucesso! Os valores foram abatidos e creditados nos bancos correspondentes.")
-            st.rerun()
+            # Filtra apenas os destinos com valor > 0
+            destinos_ativos = [d for d in destinos_coletados if d["valor"] > 0]
+            if not destinos_ativos:
+                st.error("Informe um valor maior que zero em pelo menos um destino!")
+            else:
+                soma_destinos = sum(d["valor"] for d in destinos_ativos)
+                aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), valor_total_recebido, destinos_ativos)
+                st.success(f"Reembolso de R$ {valor_total_recebido:,.2f} lançado e rateado com sucesso em {len(destinos_ativos)} destino(s)!")
+                st.rerun()
 
     # Histórico de Distribuições
     if not df_reemb_hist.empty:
