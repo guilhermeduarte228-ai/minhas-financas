@@ -368,6 +368,10 @@ st.markdown("""
         background: rgba(239, 68, 68, 0.16) !important;
         border-color: rgba(239, 68, 68, 0.65) !important;
     }
+    .cal-cell.has-reemb-livre {
+        background: rgba(234, 179, 8, 0.16) !important;
+        border-color: rgba(234, 179, 8, 0.75) !important;
+    }
     .cal-cell.has-ambos {
         background: rgba(245, 158, 11, 0.16) !important;
         border-color: rgba(245, 158, 11, 0.65) !important;
@@ -385,6 +389,7 @@ st.markdown("""
     }
     .badge-in { color: #4ade80; }
     .badge-out { color: #f87171; }
+    .badge-reemb-livre { color: #fbbf24; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -890,6 +895,61 @@ def efetivar_reembolso_item(id_item):
     conn.commit()
     conn.close()
 
+def atualizar_item_destino(id_item, nova_data, novo_banco, nova_acao, novo_valor, novo_motivo):
+    id_item = int(id_item)
+    novo_valor = float(novo_valor)
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("""
+        SELECT banco, acao, valor, motivo, estornado, reembolso_id, status
+        FROM reembolsos_destinados_itens
+        WHERE id = ?
+    """, (id_item,))
+    row = c.fetchone()
+    if row and row[4] == 0:
+        old_banco, old_acao, old_val, old_motivo, _, reemb_id, st_atual = row
+        old_val = float(old_val)
+        hoje_str = date.today().strftime("%Y-%m-%d")
+
+        # Se já estava efetivado, reverte o efeito antigo nos saldos/faturas/cheque
+        if st_atual == "Efetivado":
+            if old_acao == "Abater Cheque Especial":
+                c.execute("UPDATE contas_bancarias SET cheque_especial_usado = cheque_especial_usado + ? WHERE banco = ?", (old_val, old_banco))
+            elif old_acao == "Pagar/Abater Fatura de Cartão":
+                c.execute("UPDATE contas_bancarias SET fatura_atual = fatura_atual + ? WHERE banco = ?", (old_val, old_banco))
+            elif old_acao == "Creditar em Conta Corrente":
+                c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (old_val, old_banco))
+
+        # Define novo status de acordo com a nova data (se data > hoje, vira Previsto; se <= hoje, vira Efetivado)
+        novo_status = "Efetivado" if nova_data <= hoje_str else "Previsto"
+
+        c.execute("""
+            UPDATE reembolsos_destinados_itens
+            SET data = ?, banco = ?, acao = ?, valor = ?, motivo = ?, status = ?
+            WHERE id = ?
+        """, (nova_data, novo_banco, nova_acao, novo_valor, novo_motivo, novo_status, id_item))
+
+        # Se o novo status for Efetivado, aplica o novo efeito nos saldos/faturas/cheque
+        if novo_status == "Efetivado":
+            if nova_acao == "Abater Cheque Especial":
+                c.execute("UPDATE contas_bancarias SET cheque_especial_usado = MAX(0.0, cheque_especial_usado - ?) WHERE banco = ?", (novo_valor, novo_banco))
+            elif nova_acao == "Pagar/Abater Fatura de Cartão":
+                c.execute("UPDATE contas_bancarias SET fatura_atual = MAX(0.0, fatura_atual - ?) WHERE banco = ?", (novo_valor, novo_banco))
+            elif nova_acao == "Creditar em Conta Corrente":
+                c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta + ? WHERE banco = ?", (novo_valor, novo_banco))
+
+        # Recalcula valor_total do lote pai
+        c.execute("""
+            SELECT COALESCE(SUM(valor), 0.0)
+            FROM reembolsos_destinados_itens
+            WHERE reembolso_id = ? AND estornado = 0
+        """, (reemb_id,))
+        novo_tot_lote = c.fetchone()[0]
+        c.execute("UPDATE reembolsos_destinados SET valor_total = ? WHERE id = ?", (novo_tot_lote, reemb_id))
+
+    conn.commit()
+    conn.close()
+
 def estornar_item_destino(id_item):
     id_item = int(id_item)
     conn = sqlite3.connect("financas.db")
@@ -1115,6 +1175,8 @@ if "editando_id" not in st.session_state:
     st.session_state.editando_id = None
 if "editando_tx_id" not in st.session_state:
     st.session_state.editando_tx_id = None
+if "editando_reemb_id" not in st.session_state:
+    st.session_state.editando_reemb_id = None
 
 if "copiando_prev" not in st.session_state:
     st.session_state.copiando_prev = None
@@ -1303,10 +1365,21 @@ if st.session_state.bloco_ativo == "previstos":
         df_reemb_ciclo = df_reemb_itens[mask_r]
 
     entradas_prev_base = df_prev_ciclo[df_prev_ciclo["tipo"] == "Entrada"]["valor"].sum() if not df_prev_ciclo.empty else 0.0
-    entradas_reemb_total = df_reemb_ciclo["valor"].sum() if not df_reemb_ciclo.empty else 0.0
-    entradas_previstas = entradas_prev_base + entradas_reemb_total
-    
-    saidas_previstas = df_prev_ciclo[df_prev_ciclo["tipo"] == "Saída"]["valor"].sum() if not df_prev_ciclo.empty else 0.0
+    saidas_prev_base = df_prev_ciclo[df_prev_ciclo["tipo"] == "Saída"]["valor"].sum() if not df_prev_ciclo.empty else 0.0
+
+    reemb_livre_ciclo = 0.0
+    reemb_comprometido_ciclo = 0.0
+    if not df_reemb_ciclo.empty:
+        for _, rr_c in df_reemb_ciclo.iterrows():
+            if rr_c["acao"] == "Creditar em Conta Corrente":
+                reemb_livre_ciclo += float(rr_c["valor"])
+            else:
+                reemb_comprometido_ciclo += float(rr_c["valor"])
+
+    # Entradas reais livres = salários/rendas + reembolsos sem destinação de dívida (Conta Corrente)
+    entradas_previstas = entradas_prev_base + reemb_livre_ciclo
+    # Saídas/Comprometimentos = contas a pagar + reembolsos já carimbados para pagar cartão/cheque especial
+    saidas_previstas = saidas_prev_base + reemb_comprometido_ciclo
     saldo_projetado = total_saldos + entradas_previstas - saidas_previstas
 
     # PAINEL DE SALDO PREVISTO A RECEBER E COMPARATIVO DO CICLO
@@ -1315,11 +1388,11 @@ if st.session_state.bloco_ativo == "previstos":
         <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Balanço {nome_mes_comp} ({dt_ciclo_ini.strftime('%d/%m')} a {dt_ciclo_fim.strftime('%d/%m')})</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
             <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">PREVISTO A RECEBER</span>
+                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">ENTRADA LIVRE A RECEBER</span>
                 <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #4ade80;">+ R$ {entradas_previstas:,.2f}</div>
             </div>
             <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #f87171; font-weight: 700;">PREVISTO A PAGAR</span>
+                <span style="font-size: 0.62rem; color: #f87171; font-weight: 700;">SAÍDAS / DESTINADOS</span>
                 <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #f87171;">- R$ {saidas_previstas:,.2f}</div>
             </div>
         </div>
@@ -1368,7 +1441,9 @@ if st.session_state.bloco_ativo == "previstos":
             try:
                 dt_obj = datetime.strptime(row["data_prevista"], "%Y-%m-%d").date()
                 if dt_full_ini <= dt_obj <= dt_full_fim:
-                    eventos_por_data.setdefault(dt_obj, []).append(row)
+                    ev_dict = row.to_dict()
+                    ev_dict["papel_cal"] = "EntradaLivre" if row["tipo"] == "Entrada" else "SaidaComprometida"
+                    eventos_por_data.setdefault(dt_obj, []).append(ev_dict)
             except:
                 pass
 
@@ -1377,10 +1452,12 @@ if st.session_state.bloco_ativo == "previstos":
             try:
                 dt_r = datetime.strptime(row_r["data"], "%Y-%m-%d").date()
                 if dt_full_ini <= dt_r <= dt_full_fim:
+                    is_sem_destino_pgto = (row_r["acao"] == "Creditar em Conta Corrente")
                     eventos_por_data.setdefault(dt_r, []).append({
                         "descricao": f"⛽ Reembolso: {row_r['motivo']}",
                         "valor": row_r["valor"],
-                        "tipo": "Entrada",
+                        "tipo": "Entrada" if is_sem_destino_pgto else "Saída",
+                        "papel_cal": "ReembSemDestino" if is_sem_destino_pgto else "SaidaComprometida",
                         "banco": row_r["banco"],
                         "is_reembolso": True
                     })
@@ -1415,24 +1492,36 @@ if st.session_state.bloco_ativo == "previstos":
 
                 badges_html = ""
                 if cur_dt in eventos_por_data:
-                    tem_in = any(ev["tipo"] == "Entrada" for ev in eventos_por_data[cur_dt])
-                    tem_out = any(ev["tipo"] == "Saída" for ev in eventos_por_data[cur_dt])
-                    if tem_in and tem_out:
-                        classes.append("has-ambos")
-                    elif tem_in:
-                        classes.append("has-entrada")
-                    elif tem_out:
-                        classes.append("has-saida")
+                    evs = eventos_por_data[cur_dt]
+                    tem_in_livre = any(ev["papel_cal"] == "EntradaLivre" for ev in evs)
+                    tem_reemb_amarelo = any(ev["papel_cal"] == "ReembSemDestino" for ev in evs)
+                    tem_out_comp = any(ev["papel_cal"] == "SaidaComprometida" for ev in evs)
 
-                    for ev in eventos_por_data[cur_dt]:
-                        cls_b = "badge-in" if ev["tipo"] == "Entrada" else "badge-out"
-                        sinal_b = "+" if ev["tipo"] == "Entrada" else "-"
+                    if (tem_in_livre or tem_reemb_amarelo) and tem_out_comp:
+                        classes.append("has-ambos")
+                    elif tem_out_comp:
+                        classes.append("has-saida")
+                    elif tem_reemb_amarelo and not tem_in_livre:
+                        classes.append("has-reemb-livre")
+                    elif tem_in_livre:
+                        classes.append("has-entrada")
+
+                    for ev in evs:
+                        papel = ev["papel_cal"]
+                        if papel == "SaidaComprometida":
+                            cls_b = "badge-out"
+                            sinal_b = "-"
+                        elif papel == "ReembSemDestino":
+                            cls_b = "badge-reemb-livre"
+                            sinal_b = "+"
+                        else:
+                            cls_b = "badge-in"
+                            sinal_b = "+"
                         v_curto = f"{sinal_b}{ev['valor']:,.0f}".replace(",", ".")
                         badges_html += f'<span class="cal-badge {cls_b}">{v_curto}</span>'
 
                 cls_str = " ".join(classes)
                 cor_num = "#eab308" if is_payday else ("#38bdf8" if is_today else "#94a3b8")
-                # Mostra dia/mês nos dias de virada (01..03 do mês seguinte) ou dia do mês atual
                 lbl_dia = f"{cur_dt.day:02d}/{cur_dt.month:02d}" if cur_dt.month != st.session_state.cal_mes else f"{cur_dt.day}"
                 tag_dia = f"💰{lbl_dia}" if is_payday else lbl_dia
                 html_cal += f'<td class="{cls_str}"><span style="color: {cor_num};">{tag_dia}</span>{badges_html}</td>'
@@ -1443,9 +1532,10 @@ if st.session_state.bloco_ativo == "previstos":
     st.markdown(html_cal, unsafe_allow_html=True)
     st.markdown(f"""
     <div style="display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 12px 0; font-size: 0.64rem;">
-        <span style="color: #eab308;">💰 16/{st.session_state.cal_mes:02d} (Adiant.) e {dt_salario_03.strftime('%d/%m')} (Salário {nome_mes_comp})</span>
-        <span style="color: #4ade80;">🟢 Entrada / Reembolso</span>
-        <span style="color: #f87171;">🔴 Conta a Pagar</span>
+        <span style="color: #eab308;">💰 16/{st.session_state.cal_mes:02d} e {dt_salario_03.strftime('%d/%m')} (Salários)</span>
+        <span style="color: #4ade80;">🟢 Entrada Livre</span>
+        <span style="color: #fbbf24;">🟡 Reembolso s/ Destinação</span>
+        <span style="color: #f87171;">🔴 Conta / Reembolso Destinado</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1613,16 +1703,21 @@ if st.session_state.bloco_ativo == "previstos":
                 st.markdown('</div>', unsafe_allow_html=True)
 
         for idx_r, row_r in df_reemb_ciclo.iterrows():
+            is_r_livre = (row_r["acao"] == "Creditar em Conta Corrente")
+            cor_borda_r = "#fbbf24" if is_r_livre else "#f87171"
+            cor_val_r = "#fbbf24" if is_r_livre else "#f87171"
+            sinal_val_r = "+" if is_r_livre else "-"
+            tag_dest_r = "🟡 Sem destinação (Conta)" if is_r_livre else "🔴 Já destinado (Saída)"
             col_info_r, col_botoes_r = st.columns([4.8, 1.2])
             with col_info_r:
                 st.markdown(f"""
-                <div class="prev-item-card" style="margin-bottom: 6px; border-left: 3px solid #38bdf8;">
+                <div class="prev-item-card" style="margin-bottom: 6px; border-left: 3px solid {cor_borda_r};">
                     <div>
                         <div style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">⛽ Reembolso: {row_r['motivo']}</div>
-                        <div style="font-size: 0.63rem; color: #94a3b8;">📅 {row_r['data']} • {row_r['banco']} ({row_r['acao']})</div>
+                        <div style="font-size: 0.63rem; color: #94a3b8;">📅 {row_r['data']} • {row_r['banco']} • {tag_dest_r}</div>
                     </div>
-                    <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.85rem; color: #4ade80; text-align: right;">
-                        + R$ {row_r['valor']:,.2f}
+                    <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.85rem; color: {cor_val_r}; text-align: right;">
+                        {sinal_val_r} R$ {row_r['valor']:,.2f}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1834,15 +1929,65 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Histórico de Destinações com Estorno Individual e Baixa de Previstos
+    # Histórico de Destinações com Edição, Baixa e Estorno Individual
     df_itens_hist = get_reembolsos_itens()
     if not df_itens_hist.empty:
-        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Destinações Ativas (Baixa & Estorno Individual):</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Destinações Ativas (Editar, Baixa & Estorno):</div>', unsafe_allow_html=True)
+
+        # Formulário de Edição de Destinação
+        if st.session_state.editando_reemb_id is not None:
+            reemb_edit_df = df_itens_hist[df_itens_hist["id"] == st.session_state.editando_reemb_id]
+            if not reemb_edit_df.empty:
+                r_ed = reemb_edit_df.iloc[0]
+                st.markdown("""
+                <div style="background: #101c2e; border: 1px solid #38bdf8; border-radius: 14px; padding: 12px; margin-bottom: 12px;">
+                    <span style="font-size: 0.82rem; font-weight: 800; color: #38bdf8;">✏️ Editando Destinação de Reembolso</span>
+                """, unsafe_allow_html=True)
+                with st.form("form_editar_destinacao_reemb"):
+                    try:
+                        dt_ed_base = datetime.strptime(str(r_ed["data"]), "%Y-%m-%d").date()
+                    except:
+                        dt_ed_base = date.today()
+
+                    c_er1, c_er2 = st.columns(2)
+                    with c_er1:
+                        ed_dt_r = st.date_input("Data Prevista / Efetivação", value=dt_ed_base)
+                        b_list_r = df_bancos["banco"].tolist()
+                        idx_br = b_list_r.index(r_ed["banco"]) if r_ed["banco"] in b_list_r else 0
+                        ed_banco_r = st.selectbox("Banco Destino", b_list_r, index=idx_br)
+                    with c_er2:
+                        ed_val_r = st.number_input("Valor (R$)", min_value=0.01, value=float(r_ed["valor"]), step=10.0)
+                        acoes_r = ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"]
+                        idx_ar = acoes_r.index(r_ed["acao"]) if r_ed["acao"] in acoes_r else 0
+                        ed_acao_r = st.selectbox("Ação / Finalidade", acoes_r, index=idx_ar)
+
+                    ed_motivo_r = st.text_input("Identificação / Motivo", value=str(r_ed["motivo"]))
+
+                    c_br1, c_br2 = st.columns(2)
+                    with c_br1:
+                        if st.form_submit_button("💾 Salvar Alteração"):
+                            atualizar_item_destino(
+                                int(r_ed["id"]),
+                                ed_dt_r.strftime("%Y-%m-%d"),
+                                ed_banco_r,
+                                ed_acao_r,
+                                ed_val_r,
+                                ed_motivo_r
+                            )
+                            st.session_state.editando_reemb_id = None
+                            st.success("Destinação atualizada com sucesso!")
+                            st.rerun()
+                    with c_br2:
+                        if st.form_submit_button("✕ Cancelar"):
+                            st.session_state.editando_reemb_id = None
+                            st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+
         for _, item in df_itens_hist.iterrows():
             st_item = item.get("status", "Efetivado")
             badge_st = "⏳ Previsto" if st_item == "Previsto" else "✅ Efetivado"
             cor_st = "#eab308" if st_item == "Previsto" else "#4ade80"
-            c_info_d, c_btn_est = st.columns([3.8, 2.2])
+            c_info_d, c_btn_est = st.columns([3.5, 2.5])
             with c_info_d:
                 st.markdown(f"""
                 <div style="background: #0d1522; border: 1px solid #1a273b; border-left: 3px solid {cor_st}; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px;">
@@ -1855,27 +2000,47 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
                 """, unsafe_allow_html=True)
             with c_btn_est:
                 if st_item == "Previsto":
-                    cb1, cb2 = st.columns(2)
+                    cb1, cb2, cb3 = st.columns(3)
                     with cb1:
+                        st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
+                        if st.button("✏️", key=f"btn_ed_reemb_{item['id']}", help="Editar destinação futura"):
+                            st.session_state.editando_reemb_id = int(item["id"])
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    with cb2:
                         st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
                         if st.button("✅", key=f"btn_ef_reemb_{item['id']}", help="Confirmar que caiu na conta"):
                             efetivar_reembolso_item(item["id"])
+                            if st.session_state.editando_reemb_id == int(item["id"]):
+                                st.session_state.editando_reemb_id = None
                             st.success("Reembolso efetivado!")
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    with cb3:
+                        st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
+                        if st.button("↩️", key=f"btn_est_{item['id']}", help="Cancelar/Excluir"):
+                            estornar_item_destino(item["id"])
+                            if st.session_state.editando_reemb_id == int(item["id"]):
+                                st.session_state.editando_reemb_id = None
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    cb1, cb2 = st.columns(2)
+                    with cb1:
+                        st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
+                        if st.button("✏️", key=f"btn_ed_reemb_{item['id']}", help="Editar destinação"):
+                            st.session_state.editando_reemb_id = int(item["id"])
                             st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
                     with cb2:
                         st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                        if st.button("↩️", key=f"btn_est_{item['id']}", help="Cancelar/Excluir"):
+                        if st.button("↩️", key=f"btn_est_{item['id']}", help="Desfazer e estornar este valor"):
                             estornar_item_destino(item["id"])
+                            if st.session_state.editando_reemb_id == int(item["id"]):
+                                st.session_state.editando_reemb_id = None
+                            st.success("Destinação estornada!")
                             st.rerun()
                         st.markdown('</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                    if st.button("↩️ Estornar", key=f"btn_est_{item['id']}", help="Desfazer e estornar este valor"):
-                        estornar_item_destino(item["id"])
-                        st.success("Destinação estornada com sucesso!")
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "advisor":
