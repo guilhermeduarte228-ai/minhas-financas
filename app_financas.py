@@ -1255,13 +1255,13 @@ if "mostrar_calc_km" not in st.session_state:
 if "mostrar_form_rateio" not in st.session_state:
     st.session_state.mostrar_form_rateio = False
 if "recolher_lanc_ciclo" not in st.session_state:
-    st.session_state.recolher_lanc_ciclo = False
+    st.session_state.recolher_lanc_ciclo = True
 if "recolher_dest_reemb" not in st.session_state:
-    st.session_state.recolher_dest_reemb = False
+    st.session_state.recolher_dest_reemb = True
 if "recolher_parc_lista" not in st.session_state:
-    st.session_state.recolher_parc_lista = False
+    st.session_state.recolher_parc_lista = True
 if "recolher_extrato_lista" not in st.session_state:
-    st.session_state.recolher_extrato_lista = False
+    st.session_state.recolher_extrato_lista = True
 
 if "editando_id" not in st.session_state:
     st.session_state.editando_id = None
@@ -1368,24 +1368,52 @@ st.markdown(f"""
 # RECURSOS RÁPIDOS
 st.markdown('<div class="sec-header">Recursos Rápidos</div>', unsafe_allow_html=True)
 st.markdown('<div class="recursos-box">', unsafe_allow_html=True)
+def resetar_recolhiveis_recurso_rapido():
+    st.session_state.mostrar_form_prev = False
+    st.session_state.mostrar_calc_km = False
+    st.session_state.mostrar_form_rateio = False
+    st.session_state.recolher_lanc_ciclo = True
+    st.session_state.recolher_dest_reemb = True
+    st.session_state.mostrar_cal_aloc = True  # Calendário permanece visível
+
 r_col1, r_col2 = st.columns(2)
 with r_col1:
     if st.button("📅 Previsões & Calendário", key="btn_prev"):
-        st.session_state.bloco_ativo = "previstos" if st.session_state.bloco_ativo != "previstos" else None
+        if st.session_state.bloco_ativo != "previstos":
+            resetar_recolhiveis_recurso_rapido()
+            st.session_state.bloco_ativo = "previstos"
+        else:
+            st.session_state.bloco_ativo = None
 with r_col2:
     if st.button("⛽ Destinar Reembolso", key="btn_km"):
-        st.session_state.bloco_ativo = "destinar_reembolso" if st.session_state.bloco_ativo != "destinar_reembolso" else None
+        if st.session_state.bloco_ativo != "destinar_reembolso":
+            resetar_recolhiveis_recurso_rapido()
+            st.session_state.bloco_ativo = "destinar_reembolso"
+        else:
+            st.session_state.bloco_ativo = None
 
 r_col3, r_col4, r_col5 = st.columns(3)
 with r_col3:
     if st.button("🧠 Advisor", key="btn_adv"):
-        st.session_state.bloco_ativo = "advisor" if st.session_state.bloco_ativo != "advisor" else None
+        if st.session_state.bloco_ativo != "advisor":
+            resetar_recolhiveis_recurso_rapido()
+            st.session_state.bloco_ativo = "advisor"
+        else:
+            st.session_state.bloco_ativo = None
 with r_col4:
     if st.button("💳 Vencimentos", key="btn_venc"):
-        st.session_state.bloco_ativo = "vencimentos" if st.session_state.bloco_ativo != "vencimentos" else None
+        if st.session_state.bloco_ativo != "vencimentos":
+            resetar_recolhiveis_recurso_rapido()
+            st.session_state.bloco_ativo = "vencimentos"
+        else:
+            st.session_state.bloco_ativo = None
 with r_col5:
     if st.button("📊 Gráficos", key="btn_graf"):
-        st.session_state.bloco_ativo = "graficos" if st.session_state.bloco_ativo != "graficos" else None
+        if st.session_state.bloco_ativo != "graficos":
+            resetar_recolhiveis_recurso_rapido()
+            st.session_state.bloco_ativo = "graficos"
+        else:
+            st.session_state.bloco_ativo = None
 st.markdown('</div>', unsafe_allow_html=True)
 
 # ================= ÁREA DINÂMICA =================
@@ -2766,18 +2794,16 @@ elif st.session_state.bloco_ativo == "advisor":
         "desc": resumo_valores_aloc + orientacao_fonte
     })
 
-    for diag in diagnosticos:
+    for idx_dg, diag in enumerate(diagnosticos):
         cor_borda = "#38bdf8"
         if diag["tipo"] == "danger": cor_borda = "#f87171"
         elif diag["tipo"] == "warning": cor_borda = "#fbbf24"
         elif diag["tipo"] == "success": cor_borda = "#4ade80"
-        
-        st.markdown(f"""
-        <div style="background: #0d1522; border: 1px solid #1d2d42; border-left: 4px solid {cor_borda}; border-radius: 12px; padding: 12px; margin-bottom: 10px;">
-            <div style="font-size: 0.82rem; font-weight: 700; color: #ffffff;">{diag['titulo']}</div>
-            <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px; line-height: 1.45;">{diag['desc']}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        with st.expander(diag["titulo"], expanded=False):
+            st.markdown(
+                f'<div style="background:#0d1522;border-left:4px solid {cor_borda};border-radius:8px;padding:10px;font-size:0.72rem;color:#cbd5e1;line-height:1.45;">{diag["desc"]}</div>',
+                unsafe_allow_html=True
+            )
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "vencimentos":
