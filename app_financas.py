@@ -592,18 +592,17 @@ def efetivar_previsto(id_prev):
     conn.commit()
     conn.close()
 
-def get_intervalo_ciclo(ano, mes, modo="Ciclo Completo (03 a 03)"):
-    dt_03 = date(ano, mes, 3)
+def get_intervalo_ciclo(ano, mes, modo="Ciclo Completo (04 a 03)"):
+    dt_ini = date(ano, mes, 4)
     dt_15 = date(ano, mes, 15)
     dt_16 = date(ano, mes, 16)
-    dt_prox_03 = dt_03 + relativedelta(months=1)
-    dt_fim_ciclo = dt_prox_03 - timedelta(days=1)  # 03/MM até 02/MM+1 (fechamento na virada do dia 03)
-    if "1ª Quinzena" in modo:
-        return dt_03, dt_15, dt_prox_03
-    elif "2ª Quinzena" in modo:
-        return dt_16, dt_fim_ciclo, dt_prox_03
+    dt_fim = date(ano, mes, 3) + relativedelta(months=1)  # Dia 03 do mês seguinte (salário do mês)
+    if "1ª Parte" in modo:
+        return dt_ini, dt_15, dt_fim
+    elif "2ª Parte" in modo:
+        return dt_16, dt_fim, dt_fim
     else:
-        return dt_03, dt_fim_ciclo, dt_prox_03
+        return dt_ini, dt_fim, dt_fim
 
 def remover_previsto(id_prev):
     id_prev = int(id_prev)
@@ -1046,13 +1045,13 @@ if "copiando_prev" not in st.session_state:
     st.session_state.copiando_prev = None
 
 hoje = date.today()
-dt_ciclo_default = hoje if hoje.day >= 3 else (hoje - relativedelta(months=1))
+dt_ciclo_default = hoje if hoje.day >= 4 else (hoje - relativedelta(months=1))
 if "cal_mes" not in st.session_state:
     st.session_state.cal_mes = dt_ciclo_default.month
 if "cal_ano" not in st.session_state:
     st.session_state.cal_ano = dt_ciclo_default.year
-if "modo_ciclo" not in st.session_state:
-    st.session_state.modo_ciclo = "Ciclo Completo (03 a 03)"
+if "modo_ciclo" not in st.session_state or st.session_state.modo_ciclo not in ["Ciclo Completo (04 a 03)", "1ª Parte (Dia 04 a 15)", "2ª Parte (Dia 16 a 03)"]:
+    st.session_state.modo_ciclo = "Ciclo Completo (04 a 03)"
 
 # Barra Superior
 st.markdown("""
@@ -1124,27 +1123,32 @@ if st.session_state.bloco_ativo == "previstos":
             st.session_state.bloco_ativo = None
             st.rerun()
 
-    # Seletor de Período do Ciclo (Dia 03 a Dia 03 + Quinzenas 03 e 16)
+    # Seletor de Período do Ciclo (Competência do Mês: Dia 04 a Dia 03 do mês seguinte)
+    opcoes_ciclo = ["Ciclo Completo (04 a 03)", "1ª Parte (Dia 04 a 15)", "2ª Parte (Dia 16 a 03)"]
     modo_sel = st.selectbox(
         "Período de Apuração:",
-        ["Ciclo Completo (03 a 03)", "1ª Quinzena (Dia 03 a 15)", "2ª Quinzena (Dia 16 a 02)"],
-        index=["Ciclo Completo (03 a 03)", "1ª Quinzena (Dia 03 a 15)", "2ª Quinzena (Dia 16 a 02)"].index(st.session_state.modo_ciclo),
+        opcoes_ciclo,
+        index=opcoes_ciclo.index(st.session_state.modo_ciclo),
         key="sel_modo_ciclo_prev"
     )
     if modo_sel != st.session_state.modo_ciclo:
         st.session_state.modo_ciclo = modo_sel
         st.rerun()
 
-    dt_ciclo_ini, dt_ciclo_fim, dt_prox_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, st.session_state.modo_ciclo)
+    dt_ciclo_ini, dt_ciclo_fim, dt_salario_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, st.session_state.modo_ciclo)
+    dt_full_ini, dt_full_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
+
+    meses_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    nome_mes_comp = meses_nomes[st.session_state.cal_mes - 1]
 
     st.markdown(f"""
     <div style="background: #101929; border: 1px solid #243652; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; font-size: 0.7rem; color: #cbd5e1;">
-        📆 <strong>Fechamento Ativo:</strong> {dt_ciclo_ini.strftime('%d/%m/%Y')} até {dt_ciclo_fim.strftime('%d/%m/%Y')}
-        <div style="font-size: 0.62rem; color: #eab308; margin-top: 2px;">💰 Renda fixa nos dias 03 e 16 • Próxima virada em {dt_prox_03.strftime('%d/%m/%Y')}</div>
+        📆 <strong>Competência {nome_mes_comp}/{st.session_state.cal_ano}:</strong> {dt_ciclo_ini.strftime('%d/%m/%Y')} até {dt_ciclo_fim.strftime('%d/%m/%Y')}
+        <div style="font-size: 0.62rem; color: #eab308; margin-top: 2px;">💰 Adiantamento dia 16/{st.session_state.cal_mes:02d} • Salário de {nome_mes_comp} fecha em {dt_salario_03.strftime('%d/%m/%Y')}</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Filtrar previsões e reembolsos estritamente dentro do ciclo (03 a 03)
+    # Filtrar previsões e reembolsos estritamente dentro do ciclo (04/MM a 03/MM+1)
     df_prev_ciclo = pd.DataFrame()
     if not df_prev.empty:
         mask_p = []
@@ -1177,7 +1181,7 @@ if st.session_state.bloco_ativo == "previstos":
     # PAINEL DE SALDO PREVISTO A RECEBER E COMPARATIVO DO CICLO
     st.markdown(f"""
     <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 6px 0 14px 0;">
-        <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Balanço do Período ({dt_ciclo_ini.strftime('%d/%m')} a {dt_ciclo_fim.strftime('%d/%m')})</div>
+        <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Balanço {nome_mes_comp} ({dt_ciclo_ini.strftime('%d/%m')} a {dt_ciclo_fim.strftime('%d/%m')})</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
             <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
                 <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">PREVISTO A RECEBER</span>
@@ -1203,11 +1207,10 @@ if st.session_state.bloco_ativo == "previstos":
     </div>
     """, unsafe_allow_html=True)
 
-    # CALENDÁRIO VISUAL COM CORES NOS DIAS PREVISTOS E DESTAQUE NOS DIAS 03 E 16
+    # CALENDÁRIO DO CICLO (04/MM até 03/MM+1)
     c_nav1, c_nav2 = st.columns([3, 2])
     with c_nav1:
-        meses_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-        st.markdown(f'<span style="font-size: 0.82rem; font-weight: 800; color: #ffffff;">🗓️ {meses_nomes[st.session_state.cal_mes - 1]} de {st.session_state.cal_ano}</span>', unsafe_allow_html=True)
+        st.markdown(f'<span style="font-size: 0.82rem; font-weight: 800; color: #ffffff;">🗓️ Ciclo {nome_mes_comp}/{st.session_state.cal_ano}</span>', unsafe_allow_html=True)
     with c_nav2:
         c_prev_m, c_next_m = st.columns(2)
         with c_prev_m:
@@ -1227,19 +1230,14 @@ if st.session_state.bloco_ativo == "previstos":
                     st.session_state.cal_mes += 1
                 st.rerun()
 
-    ano_sel = st.session_state.cal_ano
-    mes_sel = st.session_state.cal_mes
-    
-    eventos_por_dia = {}
+    # Mapeia eventos por data completa (date object) dentro do ciclo completo (04/MM a 03/MM+1)
+    eventos_por_data = {}
     if not df_prev.empty:
         for _, row in df_prev.iterrows():
             try:
                 dt_obj = datetime.strptime(row["data_prevista"], "%Y-%m-%d").date()
-                if dt_obj.year == ano_sel and dt_obj.month == mes_sel:
-                    dia = dt_obj.day
-                    if dia not in eventos_por_dia:
-                        eventos_por_dia[dia] = []
-                    eventos_por_dia[dia].append(row)
+                if dt_full_ini <= dt_obj <= dt_full_fim:
+                    eventos_por_data.setdefault(dt_obj, []).append(row)
             except:
                 pass
 
@@ -1247,11 +1245,8 @@ if st.session_state.bloco_ativo == "previstos":
         for _, row_r in df_reemb_itens.iterrows():
             try:
                 dt_r = datetime.strptime(row_r["data"], "%Y-%m-%d").date()
-                if dt_r.year == ano_sel and dt_r.month == mes_sel:
-                    dia_r = dt_r.day
-                    if dia_r not in eventos_por_dia:
-                        eventos_por_dia[dia_r] = []
-                    eventos_por_dia[dia_r].append({
+                if dt_full_ini <= dt_r <= dt_full_fim:
+                    eventos_por_data.setdefault(dt_r, []).append({
                         "descricao": f"⛽ Reembolso: {row_r['motivo']}",
                         "valor": row_r["valor"],
                         "tipo": "Entrada",
@@ -1261,7 +1256,9 @@ if st.session_state.bloco_ativo == "previstos":
             except:
                 pass
 
-    cal_matrix = calendar.monthcalendar(ano_sel, mes_sel)
+    # Constrói as semanas de 04/MM até 03/MM+1
+    start_grid = dt_full_ini - timedelta(days=dt_full_ini.weekday())
+    end_grid = dt_full_fim + timedelta(days=(6 - dt_full_fim.weekday()))
     dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
     html_cal = '<table class="cal-table"><thead><tr>'
@@ -1269,14 +1266,16 @@ if st.session_state.bloco_ativo == "previstos":
         html_cal += f'<th class="cal-th">{d_sem}</th>'
     html_cal += '</tr></thead><tbody>'
 
-    for semana in cal_matrix:
+    cur_dt = start_grid
+    while cur_dt <= end_grid:
         html_cal += '<tr>'
-        for dia in semana:
-            if dia == 0:
-                html_cal += '<td class="cal-cell" style="background: transparent; border-color: transparent;"></td>'
+        for _ in range(7):
+            in_cycle = (dt_full_ini <= cur_dt <= dt_full_fim)
+            if not in_cycle:
+                html_cal += f'<td class="cal-cell" style="opacity: 0.25;"><span style="color: #64748b; font-size: 0.58rem;">{cur_dt.day:02d}/{cur_dt.month:02d}</span></td>'
             else:
-                is_today = (dia == hoje.day and mes_sel == hoje.month and ano_sel == hoje.year)
-                is_payday = (dia in [3, 16])
+                is_today = (cur_dt == hoje)
+                is_payday = (cur_dt.day in [3, 16])
                 classes = ["cal-cell"]
                 if is_today:
                     classes.append("today")
@@ -1284,9 +1283,9 @@ if st.session_state.bloco_ativo == "previstos":
                     classes.append("payday")
 
                 badges_html = ""
-                if dia in eventos_por_dia:
-                    tem_in = any(ev["tipo"] == "Entrada" for ev in eventos_por_dia[dia])
-                    tem_out = any(ev["tipo"] == "Saída" for ev in eventos_por_dia[dia])
+                if cur_dt in eventos_por_data:
+                    tem_in = any(ev["tipo"] == "Entrada" for ev in eventos_por_data[cur_dt])
+                    tem_out = any(ev["tipo"] == "Saída" for ev in eventos_por_data[cur_dt])
                     if tem_in and tem_out:
                         classes.append("has-ambos")
                     elif tem_in:
@@ -1294,7 +1293,7 @@ if st.session_state.bloco_ativo == "previstos":
                     elif tem_out:
                         classes.append("has-saida")
 
-                    for ev in eventos_por_dia[dia]:
+                    for ev in eventos_por_data[cur_dt]:
                         cls_b = "badge-in" if ev["tipo"] == "Entrada" else "badge-out"
                         sinal_b = "+" if ev["tipo"] == "Entrada" else "-"
                         v_curto = f"{sinal_b}{ev['valor']:,.0f}".replace(",", ".")
@@ -1302,15 +1301,18 @@ if st.session_state.bloco_ativo == "previstos":
 
                 cls_str = " ".join(classes)
                 cor_num = "#eab308" if is_payday else ("#38bdf8" if is_today else "#94a3b8")
-                tag_dia = f"💰{dia}" if is_payday else f"{dia}"
+                # Mostra dia/mês nos dias de virada (01..03 do mês seguinte) ou dia do mês atual
+                lbl_dia = f"{cur_dt.day:02d}/{cur_dt.month:02d}" if cur_dt.month != st.session_state.cal_mes else f"{cur_dt.day}"
+                tag_dia = f"💰{lbl_dia}" if is_payday else lbl_dia
                 html_cal += f'<td class="{cls_str}"><span style="color: {cor_num};">{tag_dia}</span>{badges_html}</td>'
+            cur_dt += timedelta(days=1)
         html_cal += '</tr>'
     html_cal += '</tbody></table>'
 
     st.markdown(html_cal, unsafe_allow_html=True)
-    st.markdown("""
+    st.markdown(f"""
     <div style="display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 12px 0; font-size: 0.64rem;">
-        <span style="color: #eab308;">💰 Dias 03 e 16 (Renda Fixa)</span>
+        <span style="color: #eab308;">💰 16/{st.session_state.cal_mes:02d} (Adiant.) e {dt_salario_03.strftime('%d/%m')} (Salário {nome_mes_comp})</span>
         <span style="color: #4ade80;">🟢 Entrada / Reembolso</span>
         <span style="color: #f87171;">🔴 Conta a Pagar</span>
     </div>
@@ -1750,13 +1752,13 @@ elif st.session_state.bloco_ativo == "graficos":
     st.markdown('<div class="panel-box">', unsafe_allow_html=True)
     c_tit, c_fech = st.columns([5, 1])
     with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📊 Diagnóstico do Ciclo (03 a 03)</span>', unsafe_allow_html=True)
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📊 Diagnóstico da Competência (04 a 03)</span>', unsafe_allow_html=True)
     with c_fech:
         if st.button("✕", key="fechar_diag_inteligente"):
             st.session_state.bloco_ativo = None
             st.rerun()
 
-    dt_ciclo_ini, dt_ciclo_fim, dt_prox_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (03 a 03)")
+    dt_ciclo_ini, dt_ciclo_fim, dt_prox_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
     st.caption(f"Período analisado: **{dt_ciclo_ini.strftime('%d/%m/%Y')}** até **{dt_ciclo_fim.strftime('%d/%m/%Y')}** (Renda dias 03 e 16)")
 
     tot_saldo = df_bancos["saldo_conta"].sum()
