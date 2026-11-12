@@ -390,6 +390,34 @@ st.markdown("""
     .badge-in { color: #4ade80; }
     .badge-out { color: #f87171; }
     .badge-reemb-livre { color: #fbbf24; }
+
+    /* Grade do Calendário de Alocações 100% Responsiva no Celular (7 colunas fixas) */
+    .aloc-cal-grid [data-testid="stHorizontalBlock"] {
+        display: grid !important;
+        grid-template-columns: repeat(7, 1fr) !important;
+        gap: 3px !important;
+        width: 100% !important;
+        margin-bottom: 3px !important;
+    }
+    .aloc-cal-grid [data-testid="column"],
+    .aloc-cal-grid [data-testid="stColumn"] {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        flex: 1 1 0% !important;
+        padding: 0 !important;
+    }
+    .aloc-cal-grid button {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 4px 1px !important;
+        min-height: 34px !important;
+        height: 34px !important;
+        font-size: 0.66rem !important;
+        font-weight: 700 !important;
+        border-radius: 8px !important;
+        line-height: 1 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1222,6 +1250,14 @@ if "mostrar_form_parc" not in st.session_state:
 
 if "mostrar_calc_km" not in st.session_state:
     st.session_state.mostrar_calc_km = False
+if "recolher_lanc_ciclo" not in st.session_state:
+    st.session_state.recolher_lanc_ciclo = False
+if "recolher_dest_reemb" not in st.session_state:
+    st.session_state.recolher_dest_reemb = False
+if "recolher_parc_lista" not in st.session_state:
+    st.session_state.recolher_parc_lista = False
+if "recolher_extrato_lista" not in st.session_state:
+    st.session_state.recolher_extrato_lista = False
 
 if "editando_id" not in st.session_state:
     st.session_state.editando_id = None
@@ -1734,9 +1770,22 @@ if st.session_state.bloco_ativo == "previstos":
                 st.success(f"Previsão agendada com sucesso para {meses_qtd} mês(es)!")
                 st.rerun()
 
-    # Lista de Previsões do Ciclo Ativo (com botão ✅ Efetivar)
-    st.markdown(f'<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Lançamentos deste Ciclo ({dt_ciclo_ini.strftime("%d/%m")} a {dt_ciclo_fim.strftime("%d/%m")}):</div>', unsafe_allow_html=True)
-    if df_prev_ciclo.empty and df_reemb_ciclo.empty:
+    # Lista de Previsões do Ciclo Ativo (com botão de Recolher para deixar a tela enxuta)
+    qtd_lanc_ciclo = len(df_prev_ciclo) + len(df_reemb_ciclo)
+    c_lc1, c_lc2 = st.columns([3.8, 1.8])
+    with c_lc1:
+        st.markdown(f'<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Lançamentos ({qtd_lanc_ciclo}) • {dt_ciclo_ini.strftime("%d/%m")} a {dt_ciclo_fim.strftime("%d/%m")}:</div>', unsafe_allow_html=True)
+    with c_lc2:
+        st.markdown('<div class="btn-action-icon" style="margin-top: 6px;">', unsafe_allow_html=True)
+        lbl_rec_lc = "👁️ Mostrar" if st.session_state.recolher_lanc_ciclo else "🔼 Recolher"
+        if st.button(lbl_rec_lc, key="btn_toggle_rec_lc"):
+            st.session_state.recolher_lanc_ciclo = not st.session_state.recolher_lanc_ciclo
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if st.session_state.recolher_lanc_ciclo:
+        st.caption(f"Lista recolhida ({qtd_lanc_ciclo} lançamento(s) oculto(s)). Clique em **👁️ Mostrar** para expandir.")
+    elif df_prev_ciclo.empty and df_reemb_ciclo.empty:
         st.info("Nenhuma previsão agendada dentro deste período.")
     else:
         for idx, row_p in df_prev_ciclo.iterrows():
@@ -1887,18 +1936,21 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
         # Datas marcadas atualmente
         datas_marcadas_set = set(df_aloc["data_alocacao"].tolist()) if not df_aloc.empty else set()
 
-        # Grade mensal clicável (Seg a Dom)
+        # Grade mensal clicável (Seg a Dom) — 7 colunas fixas tanto no PC quanto no Celular
+        st.markdown('<div class="aloc-cal-grid">', unsafe_allow_html=True)
         cal_matrix = calendar.monthcalendar(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)
         dias_hdr = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-        cols_h = st.columns(7)
-        for idx_h, dh in enumerate(dias_hdr):
-            cols_h[idx_h].markdown(f"<div style='text-align:center; font-size:0.62rem; font-weight:700; color:#64748b;'>{dh}</div>", unsafe_allow_html=True)
+        hdr_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;">'
+        for dh in dias_hdr:
+            hdr_html += f'<div style="text-align:center;font-size:0.62rem;font-weight:700;color:#64748b;">{dh}</div>'
+        hdr_html += '</div>'
+        st.markdown(hdr_html, unsafe_allow_html=True)
 
         for sem_idx, semana in enumerate(cal_matrix):
             cols_w = st.columns(7)
             for d_idx, dia_num in enumerate(semana):
                 if dia_num == 0:
-                    cols_w[d_idx].markdown("<div style='height:34px;'></div>", unsafe_allow_html=True)
+                    cols_w[d_idx].markdown("<div style='height:34px;background:rgba(13,21,34,0.4);border-radius:8px;'></div>", unsafe_allow_html=True)
                 else:
                     dt_cell = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, dia_num)
                     dt_cell_str = dt_cell.strftime("%Y-%m-%d")
@@ -1912,6 +1964,7 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
                     ):
                         toggle_alocacao_dia(dt_cell_str, "Alocação Cliente", val_diaria_aloc, val_gas_aloc, val_ped_aloc)
                         st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
         # Botões rápidos: Marcar Seg-Sex do mês / Limpar mês
         dt_m_ini = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, 1)
@@ -2158,118 +2211,132 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Histórico de Destinações com Edição, Baixa e Estorno Individual
+    # Histórico de Destinações com Edição, Baixa, Estorno e Botão Recolher
     df_itens_hist = get_reembolsos_itens()
     if not df_itens_hist.empty:
-        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Destinações Ativas (Editar, Baixa & Estorno):</div>', unsafe_allow_html=True)
+        c_da1, c_da2 = st.columns([3.8, 1.8])
+        with c_da1:
+            st.markdown(f'<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Destinações Ativas ({len(df_itens_hist)}):</div>', unsafe_allow_html=True)
+        with c_da2:
+            st.markdown('<div class="btn-action-icon" style="margin-top: 6px;">', unsafe_allow_html=True)
+            lbl_rec_da = "👁️ Mostrar" if st.session_state.recolher_dest_reemb else "🔼 Recolher"
+            if st.button(lbl_rec_da, key="btn_toggle_rec_da"):
+                st.session_state.recolher_dest_reemb = not st.session_state.recolher_dest_reemb
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        # Formulário de Edição de Destinação
-        if st.session_state.editando_reemb_id is not None:
-            reemb_edit_df = df_itens_hist[df_itens_hist["id"] == st.session_state.editando_reemb_id]
-            if not reemb_edit_df.empty:
-                r_ed = reemb_edit_df.iloc[0]
-                st.markdown("""
-                <div style="background: #101c2e; border: 1px solid #38bdf8; border-radius: 14px; padding: 12px; margin-bottom: 12px;">
-                    <span style="font-size: 0.82rem; font-weight: 800; color: #38bdf8;">✏️ Editando Destinação de Reembolso</span>
-                """, unsafe_allow_html=True)
-                with st.form("form_editar_destinacao_reemb"):
-                    try:
-                        dt_ed_base = datetime.strptime(str(r_ed["data"]), "%Y-%m-%d").date()
-                    except:
-                        dt_ed_base = date.today()
+        if st.session_state.recolher_dest_reemb:
+            st.caption(f"Destinações recolhidas ({len(df_itens_hist)} item(ns) oculto(s)). Clique em **👁️ Mostrar** para ver.")
+        else:
 
-                    c_er1, c_er2 = st.columns(2)
-                    with c_er1:
-                        ed_dt_r = st.date_input("Data Prevista / Efetivação", value=dt_ed_base)
-                        b_list_r = df_bancos["banco"].tolist()
-                        idx_br = b_list_r.index(r_ed["banco"]) if r_ed["banco"] in b_list_r else 0
-                        ed_banco_r = st.selectbox("Banco Destino", b_list_r, index=idx_br)
-                    with c_er2:
-                        ed_val_r = st.number_input("Valor (R$)", min_value=0.01, value=float(r_ed["valor"]), step=10.0)
-                        acoes_r = ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"]
-                        idx_ar = acoes_r.index(r_ed["acao"]) if r_ed["acao"] in acoes_r else 0
-                        ed_acao_r = st.selectbox("Ação / Finalidade", acoes_r, index=idx_ar)
 
-                    ed_motivo_r = st.text_input("Identificação / Motivo", value=str(r_ed["motivo"]))
+            # Formulário de Edição de Destinação
+            if st.session_state.editando_reemb_id is not None:
+                reemb_edit_df = df_itens_hist[df_itens_hist["id"] == st.session_state.editando_reemb_id]
+                if not reemb_edit_df.empty:
+                    r_ed = reemb_edit_df.iloc[0]
+                    st.markdown("""
+                    <div style="background: #101c2e; border: 1px solid #38bdf8; border-radius: 14px; padding: 12px; margin-bottom: 12px;">
+                        <span style="font-size: 0.82rem; font-weight: 800; color: #38bdf8;">✏️ Editando Destinação de Reembolso</span>
+                    """, unsafe_allow_html=True)
+                    with st.form("form_editar_destinacao_reemb"):
+                        try:
+                            dt_ed_base = datetime.strptime(str(r_ed["data"]), "%Y-%m-%d").date()
+                        except:
+                            dt_ed_base = date.today()
 
-                    c_br1, c_br2 = st.columns(2)
-                    with c_br1:
-                        if st.form_submit_button("💾 Salvar Alteração"):
-                            atualizar_item_destino(
-                                int(r_ed["id"]),
-                                ed_dt_r.strftime("%Y-%m-%d"),
-                                ed_banco_r,
-                                ed_acao_r,
-                                ed_val_r,
-                                ed_motivo_r
-                            )
-                            st.session_state.editando_reemb_id = None
-                            st.success("Destinação atualizada com sucesso!")
-                            st.rerun()
-                    with c_br2:
-                        if st.form_submit_button("✕ Cancelar"):
-                            st.session_state.editando_reemb_id = None
-                            st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
+                        c_er1, c_er2 = st.columns(2)
+                        with c_er1:
+                            ed_dt_r = st.date_input("Data Prevista / Efetivação", value=dt_ed_base)
+                            b_list_r = df_bancos["banco"].tolist()
+                            idx_br = b_list_r.index(r_ed["banco"]) if r_ed["banco"] in b_list_r else 0
+                            ed_banco_r = st.selectbox("Banco Destino", b_list_r, index=idx_br)
+                        with c_er2:
+                            ed_val_r = st.number_input("Valor (R$)", min_value=0.01, value=float(r_ed["valor"]), step=10.0)
+                            acoes_r = ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"]
+                            idx_ar = acoes_r.index(r_ed["acao"]) if r_ed["acao"] in acoes_r else 0
+                            ed_acao_r = st.selectbox("Ação / Finalidade", acoes_r, index=idx_ar)
 
-        for _, item in df_itens_hist.iterrows():
-            st_item = item.get("status", "Efetivado")
-            badge_st = "⏳ Previsto" if st_item == "Previsto" else "✅ Efetivado"
-            cor_st = "#eab308" if st_item == "Previsto" else "#4ade80"
-            c_info_d, c_btn_est = st.columns([3.5, 2.5])
-            with c_info_d:
-                st.markdown(f"""
-                <div style="background: #0d1522; border: 1px solid #1a273b; border-left: 3px solid {cor_st}; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="font-weight: 700; color: #ffffff; font-size: 0.76rem;">{item['banco']} • {item['acao']}</span>
-                        <span style="color: {cor_st}; font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.8rem;">R$ {item['valor']:,.2f}</span>
+                        ed_motivo_r = st.text_input("Identificação / Motivo", value=str(r_ed["motivo"]))
+
+                        c_br1, c_br2 = st.columns(2)
+                        with c_br1:
+                            if st.form_submit_button("💾 Salvar Alteração"):
+                                atualizar_item_destino(
+                                    int(r_ed["id"]),
+                                    ed_dt_r.strftime("%Y-%m-%d"),
+                                    ed_banco_r,
+                                    ed_acao_r,
+                                    ed_val_r,
+                                    ed_motivo_r
+                                )
+                                st.session_state.editando_reemb_id = None
+                                st.success("Destinação atualizada com sucesso!")
+                                st.rerun()
+                        with c_br2:
+                            if st.form_submit_button("✕ Cancelar"):
+                                st.session_state.editando_reemb_id = None
+                                st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+            for _, item in df_itens_hist.iterrows():
+                st_item = item.get("status", "Efetivado")
+                badge_st = "⏳ Previsto" if st_item == "Previsto" else "✅ Efetivado"
+                cor_st = "#eab308" if st_item == "Previsto" else "#4ade80"
+                c_info_d, c_btn_est = st.columns([3.5, 2.5])
+                with c_info_d:
+                    st.markdown(f"""
+                    <div style="background: #0d1522; border: 1px solid #1a273b; border-left: 3px solid {cor_st}; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="font-weight: 700; color: #ffffff; font-size: 0.76rem;">{item['banco']} • {item['acao']}</span>
+                            <span style="color: {cor_st}; font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.8rem;">R$ {item['valor']:,.2f}</span>
+                        </div>
+                        <div style="font-size: 0.63rem; color: #94a3b8;">📅 {item['data']} • {item['motivo']} • <strong style="color:{cor_st};">{badge_st}</strong></div>
                     </div>
-                    <div style="font-size: 0.63rem; color: #94a3b8;">📅 {item['data']} • {item['motivo']} • <strong style="color:{cor_st};">{badge_st}</strong></div>
-                </div>
-                """, unsafe_allow_html=True)
-            with c_btn_est:
-                if st_item == "Previsto":
-                    cb1, cb2, cb3 = st.columns(3)
-                    with cb1:
-                        st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
-                        if st.button("✏️", key=f"btn_ed_reemb_{item['id']}", help="Editar destinação futura"):
-                            st.session_state.editando_reemb_id = int(item["id"])
-                            st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    with cb2:
-                        st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
-                        if st.button("✅", key=f"btn_ef_reemb_{item['id']}", help="Confirmar que caiu na conta"):
-                            efetivar_reembolso_item(item["id"])
-                            if st.session_state.editando_reemb_id == int(item["id"]):
-                                st.session_state.editando_reemb_id = None
-                            st.success("Reembolso efetivado!")
-                            st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    with cb3:
-                        st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                        if st.button("↩️", key=f"btn_est_{item['id']}", help="Cancelar/Excluir"):
-                            estornar_item_destino(item["id"])
-                            if st.session_state.editando_reemb_id == int(item["id"]):
-                                st.session_state.editando_reemb_id = None
-                            st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
-                else:
-                    cb1, cb2 = st.columns(2)
-                    with cb1:
-                        st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
-                        if st.button("✏️", key=f"btn_ed_reemb_{item['id']}", help="Editar destinação"):
-                            st.session_state.editando_reemb_id = int(item["id"])
-                            st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    with cb2:
-                        st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                        if st.button("↩️", key=f"btn_est_{item['id']}", help="Desfazer e estornar este valor"):
-                            estornar_item_destino(item["id"])
-                            if st.session_state.editando_reemb_id == int(item["id"]):
-                                st.session_state.editando_reemb_id = None
-                            st.success("Destinação estornada!")
-                            st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+                with c_btn_est:
+                    if st_item == "Previsto":
+                        cb1, cb2, cb3 = st.columns(3)
+                        with cb1:
+                            st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
+                            if st.button("✏️", key=f"btn_ed_reemb_{item['id']}", help="Editar destinação futura"):
+                                st.session_state.editando_reemb_id = int(item["id"])
+                                st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        with cb2:
+                            st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
+                            if st.button("✅", key=f"btn_ef_reemb_{item['id']}", help="Confirmar que caiu na conta"):
+                                efetivar_reembolso_item(item["id"])
+                                if st.session_state.editando_reemb_id == int(item["id"]):
+                                    st.session_state.editando_reemb_id = None
+                                st.success("Reembolso efetivado!")
+                                st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        with cb3:
+                            st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
+                            if st.button("↩️", key=f"btn_est_{item['id']}", help="Cancelar/Excluir"):
+                                estornar_item_destino(item["id"])
+                                if st.session_state.editando_reemb_id == int(item["id"]):
+                                    st.session_state.editando_reemb_id = None
+                                st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
+                    else:
+                        cb1, cb2 = st.columns(2)
+                        with cb1:
+                            st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
+                            if st.button("✏️", key=f"btn_ed_reemb_{item['id']}", help="Editar destinação"):
+                                st.session_state.editando_reemb_id = int(item["id"])
+                                st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        with cb2:
+                            st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
+                            if st.button("↩️", key=f"btn_est_{item['id']}", help="Desfazer e estornar este valor"):
+                                estornar_item_destino(item["id"])
+                                if st.session_state.editando_reemb_id == int(item["id"]):
+                                    st.session_state.editando_reemb_id = None
+                                st.success("Destinação estornada!")
+                                st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "advisor":
@@ -3057,7 +3124,20 @@ with tab_parcelas:
 
     df_parc_filtrado = df_parc if sel_filtro_cartao == "Todos os Cartões" else df_parc[df_parc["banco"] == sel_filtro_cartao]
 
-    if df_parc_filtrado.empty:
+    c_pl1, c_pl2 = st.columns([3.8, 1.8])
+    with c_pl1:
+        st.markdown(f'<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 8px 0 4px 0;">Compras Parceladas ({len(df_parc_filtrado)}):</div>', unsafe_allow_html=True)
+    with c_pl2:
+        st.markdown('<div class="btn-action-icon">', unsafe_allow_html=True)
+        lbl_rec_pl = "👁️ Mostrar" if st.session_state.recolher_parc_lista else "🔼 Recolher"
+        if st.button(lbl_rec_pl, key="btn_toggle_rec_pl"):
+            st.session_state.recolher_parc_lista = not st.session_state.recolher_parc_lista
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if st.session_state.recolher_parc_lista:
+        st.caption(f"Lista de parcelas recolhida ({len(df_parc_filtrado)} compra(s) oculta(s)). Clique em **👁️ Mostrar** para expandir.")
+    elif df_parc_filtrado.empty:
         st.info("Nenhuma compra parcelada registrada para este cartão.")
     else:
         for _, row_pc in df_parc_filtrado.iterrows():
@@ -3107,12 +3187,19 @@ with tab_parcelas:
                 st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_extrato:
-    c_ext_t, c_ext_b = st.columns([3.5, 1.5])
+    c_ext_t, c_ext_rec, c_ext_b = st.columns([2.6, 1.7, 1.7])
     with c_ext_t:
-        st.markdown('<div class="sec-header" style="margin-top: 0.5rem;">Histórico Geral</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sec-header" style="margin-top: 0.5rem;">Extrato ({len(df_tx)})</div>', unsafe_allow_html=True)
+    with c_ext_rec:
+        st.markdown('<div class="btn-action-icon" style="margin-top: 0.3rem;">', unsafe_allow_html=True)
+        lbl_rec_ext = "👁️ Mostrar" if st.session_state.recolher_extrato_lista else "🔼 Recolher"
+        if st.button(lbl_rec_ext, key="btn_toggle_rec_ext"):
+            st.session_state.recolher_extrato_lista = not st.session_state.recolher_extrato_lista
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     with c_ext_b:
         st.markdown('<div class="btn-clear" style="margin-top: 0.3rem;">', unsafe_allow_html=True)
-        if st.button("🗑️ Limpar Extrato", key="btn_limpar_extrato_aba"):
+        if st.button("🗑️ Limpar", key="btn_limpar_extrato_aba"):
             limpar_extrato_completo()
             st.session_state.editando_tx_id = None
             st.rerun()
@@ -3159,7 +3246,9 @@ with tab_extrato:
                         st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
 
-    if df_tx.empty:
+    if st.session_state.recolher_extrato_lista:
+        st.caption(f"Extrato recolhido ({len(df_tx)} transação(ões) oculta(s)). Clique em **👁️ Mostrar** para expandir.")
+    elif df_tx.empty:
         st.info("Nenhuma transação registrada no extrato.")
     else:
         for _, row in df_tx.iterrows():
