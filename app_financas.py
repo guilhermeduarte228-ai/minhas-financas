@@ -10,22 +10,40 @@ from dateutil.relativedelta import relativedelta
 import io
 import urllib.parse
 
-st.set_page_config(page_title="FINANCAS.AI • Painel Executivo", page_icon="⚡", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="FINANCAS.OS // Terminal", page_icon="◈", layout="wide", initial_sidebar_state="auto")
 
-# ================= CSS MODERNO RESPONSIVO (PC WIDE + MOBILE ADAPTATIVO) =================
+# ================= DESIGN SYSTEM FINTECH / LINEAR / BLOOMBERG DARK =================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+
+    :root {
+        --bg-base: #060911;
+        --bg-surface: #0b101b;
+        --bg-elevated: #101726;
+        --border-subtle: rgba(148, 163, 184, 0.12);
+        --border-glow: rgba(56, 189, 248, 0.35);
+        --accent-cyan: #38bdf8;
+        --accent-emerald: #10b981;
+        --accent-violet: #818cf8;
+        --accent-rose: #f43f5e;
+        --text-primary: #f8fafc;
+        --text-secondary: #94a3b8;
+        --text-muted: #64748b;
+    }
 
     html, body, .stApp {
-        background-color: #090d16 !important;
-        color: #f1f5f9;
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        background-color: var(--bg-base) !important;
+        background-image:
+            radial-gradient(circle at 15% 0%, rgba(56, 189, 248, 0.06) 0%, transparent 40%),
+            radial-gradient(circle at 85% 10%, rgba(129, 140, 248, 0.05) 0%, transparent 40%);
+        color: var(--text-primary);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
     .block-container {
-        max-width: 1280px !important;
-        padding-top: 1.2rem !important;
+        max-width: 1320px !important;
+        padding-top: 1.1rem !important;
         padding-bottom: 3rem !important;
         padding-left: 1.4rem !important;
         padding-right: 1.4rem !important;
@@ -33,107 +51,121 @@ st.markdown("""
 
     @media (max-width: 768px) {
         .block-container {
-            padding-top: 0.7rem !important;
-            padding-left: 0.75rem !important;
-            padding-right: 0.75rem !important;
+            padding-top: 0.6rem !important;
+            padding-left: 0.7rem !important;
+            padding-right: 0.7rem !important;
         }
     }
 
     #MainMenu, footer { visibility: hidden; }
-    header[data-testid="stHeader"] {
-        background: transparent !important;
-    }
+    header[data-testid="stHeader"] { background: transparent !important; }
 
-    /* Sidebar Executiva */
+    /* Sidebar Minimalista Estilo Linear */
     section[data-testid="stSidebar"] {
-        background-color: #0d1320 !important;
-        border-right: 1px solid #1c283d !important;
+        background-color: #080c15 !important;
+        border-right: 1px solid var(--border-subtle) !important;
     }
     section[data-testid="stSidebar"] .stRadio > div {
-        gap: 6px;
+        gap: 3px;
     }
     section[data-testid="stSidebar"] label {
-        background: #121b2c;
-        border: 1px solid #1e2d45;
-        border-radius: 12px;
-        padding: 10px 12px !important;
+        background: transparent !important;
+        border: 1px solid transparent !important;
+        border-radius: 8px !important;
+        padding: 8px 10px !important;
         width: 100%;
-        transition: all 0.2s ease;
-        font-weight: 700 !important;
-        font-size: 0.82rem !important;
+        color: #94a3b8 !important;
+        font-weight: 500 !important;
+        font-size: 0.80rem !important;
+        letter-spacing: -0.01em;
+        transition: all 0.15s ease;
     }
     section[data-testid="stSidebar"] label:hover {
-        border-color: #38bdf8;
-        background: #172338;
+        background: rgba(255, 255, 255, 0.04) !important;
+        color: #f8fafc !important;
+    }
+    section[data-testid="stSidebar"] label:has(input:checked) {
+        background: rgba(56, 189, 248, 0.09) !important;
+        border: 1px solid rgba(56, 189, 248, 0.25) !important;
+        color: #38bdf8 !important;
+        font-weight: 600 !important;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="radio"] > div:first-child {
+        display: none !important;
     }
 
-    /* Header Topo */
-    .exec-topbar {
+    /* Top Command Bar */
+    .cmd-bar {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: linear-gradient(135deg, #111928 0%, #0d1422 100%);
-        border: 1px solid #1e2d45;
-        border-radius: 18px;
-        padding: 14px 18px;
-        margin-bottom: 16px;
+        background: rgba(11, 16, 27, 0.85);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 10px 16px;
+        margin-bottom: 14px;
         flex-wrap: wrap;
-        gap: 10px;
+        gap: 8px;
     }
-    .exec-brand {
+    .cmd-left {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
     }
-    .exec-logo-icon {
-        width: 36px;
-        height: 36px;
-        border-radius: 10px;
-        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 800;
-        color: #090d16;
-        font-size: 1.1rem;
-    }
-    .exec-title {
-        font-size: 1.15rem;
-        font-weight: 800;
-        color: #ffffff;
-        letter-spacing: -0.3px;
-        line-height: 1.1;
-    }
-    .exec-sub {
-        font-size: 0.72rem;
-        color: #94a3b8;
-    }
-    .exec-pill {
-        background: #162236;
-        border: 1px solid #263957;
-        color: #38bdf8;
-        padding: 6px 12px;
-        border-radius: 999px;
-        font-size: 0.72rem;
+    .cmd-badge-sys {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.68rem;
         font-weight: 700;
+        letter-spacing: 0.08em;
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.1);
+        border: 1px solid rgba(56, 189, 248, 0.25);
+        padding: 3px 8px;
+        border-radius: 6px;
+    }
+    .cmd-breadcrumb {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #f8fafc;
+    }
+    .cmd-meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.70rem;
+        color: #64748b;
+    }
+    .cmd-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .tele-chip {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.66rem;
+        font-weight: 600;
+        color: #94a3b8;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border-subtle);
+        padding: 4px 10px;
+        border-radius: 6px;
         display: inline-flex;
         align-items: center;
         gap: 6px;
     }
-    .dot-online {
-        width: 8px;
-        height: 8px;
+    .pulse-dot {
+        width: 6px;
+        height: 6px;
         border-radius: 50%;
-        background: #22c55e;
-        box-shadow: 0 0 8px #22c55e;
+        background: #10b981;
+        box-shadow: 0 0 8px #10b981;
     }
 
-    /* Grade de 4 KPIs no Topo (4 colunas no PC -> 2x2 no Celular!) */
+    /* Grade de 4 KPIs (4 colunas no PC -> 2x2 no Celular) */
     .kpi-grid-4 {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 12px;
-        margin-bottom: 16px;
+        gap: 10px;
+        margin-bottom: 14px;
     }
     @media (max-width: 900px) {
         .kpi-grid-4 {
@@ -142,172 +174,147 @@ st.markdown("""
         }
     }
     .kpi-card {
-        background: linear-gradient(145deg, #131c2e 0%, #0e1524 100%);
-        border: 1px solid #1f2e47;
-        border-radius: 18px;
-        padding: 14px 16px;
+        background: linear-gradient(180deg, rgba(16, 23, 38, 0.9) 0%, rgba(11, 16, 27, 0.95) 100%);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 14px 15px;
         position: relative;
-        overflow: hidden;
+        transition: border-color 0.2s ease;
     }
-    .kpi-card.accent-green { border-top: 3px solid #22c55e; }
-    .kpi-card.accent-blue { border-top: 3px solid #38bdf8; }
-    .kpi-card.accent-purple { border-top: 3px solid #a855f7; }
-    .kpi-card.accent-red { border-top: 3px solid #f43f5e; }
-
+    .kpi-card:hover {
+        border-color: rgba(148, 163, 184, 0.28);
+    }
+    .kpi-top-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
     .kpi-lbl {
-        font-size: 0.68rem;
-        font-weight: 700;
+        font-size: 0.66rem;
+        font-weight: 600;
         color: #94a3b8;
         text-transform: uppercase;
-        letter-spacing: 0.6px;
+        letter-spacing: 0.06em;
     }
+    .kpi-tag {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.60rem;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    .tag-emerald { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }
+    .tag-cyan { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); }
+    .tag-violet { background: rgba(129, 140, 248, 0.12); color: #a5b4fc; border: 1px solid rgba(129, 140, 248, 0.25); }
+    .tag-rose { background: rgba(244, 63, 94, 0.12); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.25); }
+
     .kpi-val {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 1.45rem;
-        font-weight: 800;
-        color: #ffffff;
-        margin: 6px 0 4px 0;
-        letter-spacing: -0.5px;
+        font-size: 1.42rem;
+        font-weight: 700;
+        color: #f8fafc;
+        margin: 8px 0 6px 0;
+        letter-spacing: -0.03em;
     }
     @media (max-width: 768px) {
-        .kpi-val { font-size: 1.15rem; }
+        .kpi-val { font-size: 1.12rem; }
         .kpi-card { padding: 11px 12px; }
     }
     .kpi-foot {
         font-size: 0.68rem;
-        color: #94a3b8;
-        line-height: 1.3;
-    }
-
-    /* Barra de Progresso do Ciclo */
-    .ciclo-bar-bg {
-        width: 100%;
-        height: 7px;
-        background: #1b273d;
-        border-radius: 999px;
-        overflow: hidden;
-        margin: 8px 0 6px 0;
-    }
-    .ciclo-bar-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #38bdf8 0%, #a855f7 100%);
-        border-radius: 999px;
-    }
-
-    /* Bento Card Genérico */
-    .bento-box {
-        background: #111927;
-        border: 1px solid #1e2d44;
-        border-radius: 18px;
-        padding: 16px;
-        margin-bottom: 14px;
-    }
-    .bento-title {
-        font-size: 0.85rem;
-        font-weight: 800;
-        color: #ffffff;
-        margin-bottom: 10px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    /* Cards de Bancos */
-    .bank-card {
-        background: #121a28;
-        border: 1px solid #1f2d42;
-        border-radius: 16px;
-        padding: 14px;
-        margin-bottom: 10px;
-    }
-    .bank-card-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-    }
-    .bank-badge {
-        font-size: 0.90rem;
-        font-weight: 800;
-        color: #ffffff;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .bank-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 4px;
-    }
-    .bank-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-    }
-    .bank-stat {
-        background: #0c121c;
-        border: 1px solid #182436;
-        border-radius: 10px;
-        padding: 9px 10px;
-    }
-    .bank-stat-lbl {
-        font-size: 0.60rem;
         color: #64748b;
-        font-weight: 700;
-        text-transform: uppercase;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
-    .bank-stat-val {
+
+    /* Progress Bar Ultra-fina */
+    .thin-bar-bg {
+        width: 100%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 99px;
+        overflow: hidden;
+        margin: 6px 0;
+    }
+    .thin-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #38bdf8, #818cf8);
+        border-radius: 99px;
+    }
+
+    /* Surface Panels */
+    .tech-panel {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 14px;
+        padding: 16px;
+        margin-bottom: 12px;
+    }
+    .panel-hdr {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 10px;
+        margin-bottom: 12px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+    .panel-hdr-title {
+        font-size: 0.80rem;
+        font-weight: 700;
+        color: #f8fafc;
+        letter-spacing: -0.01em;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .panel-hdr-sub {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.92rem;
-        font-weight: 700;
-        color: #ffffff;
-        margin-top: 2px;
+        font-size: 0.65rem;
+        color: #64748b;
     }
 
-    /* Pills de Status */
-    .md-msg-pill {
-        display: inline-block;
-        padding: 3px 9px;
-        border-radius: 8px;
-        font-size: 0.66rem;
-        font-weight: 700;
-    }
-    .msg-danger { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-    .msg-warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-    .msg-success { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
-    .msg-neutral { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
-
-    /* Botões */
+    /* Botões Minimalistas */
     .stButton > button {
-        border-radius: 12px !important;
-        font-weight: 700 !important;
-        font-size: 0.78rem !important;
-        border: 1px solid #243652 !important;
-        transition: all 0.18s ease !important;
+        background: #111827 !important;
+        color: #e2e8f0 !important;
+        border: 1px solid rgba(148, 163, 184, 0.16) !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        font-size: 0.75rem !important;
+        padding: 0.42rem 0.75rem !important;
+        transition: all 0.15s ease !important;
     }
     .stButton > button:hover {
+        background: #182236 !important;
         border-color: #38bdf8 !important;
-        transform: translateY(-1px);
+        color: #ffffff !important;
+    }
+    /* Botão Primário (Dias selecionados no Calendário e Ações Principais) em Ciano/Esmeralda Tecnológico, nunca vermelho */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.22) 0%, rgba(16, 185, 129, 0.22) 100%) !important;
+        border: 1px solid #38bdf8 !important;
+        color: #38bdf8 !important;
+        box-shadow: 0 0 12px rgba(56, 189, 248, 0.18) !important;
     }
     .btn-clear button {
-        background: rgba(239, 68, 68, 0.12) !important;
-        color: #f87171 !important;
-        border: 1px solid rgba(239, 68, 68, 0.35) !important;
+        background: rgba(244, 63, 94, 0.08) !important;
+        color: #fb7185 !important;
+        border: 1px solid rgba(244, 63, 94, 0.25) !important;
     }
-    .btn-action-icon button {
-        background: rgba(56, 189, 248, 0.12) !important;
-        color: #38bdf8 !important;
-        border: 1px solid rgba(56, 189, 248, 0.35) !important;
+    .btn-clear button:hover {
+        background: rgba(244, 63, 94, 0.16) !important;
+        border-color: #f43f5e !important;
     }
 
-    /* Grade do Calendário de Alocações 100% Responsiva no Celular (7 colunas fixas) */
+    /* Grade do Calendário de Alocações 100% Responsiva (7 colunas fixas PC e Celular) */
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(7)),
     [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(7)) {
         display: grid !important;
         grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
-        gap: 3px !important;
+        gap: 4px !important;
         width: 100% !important;
-        margin-bottom: 3px !important;
+        margin-bottom: 4px !important;
     }
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(7)) > [data-testid="stColumn"],
     [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(7)) > [data-testid="column"] {
@@ -324,83 +331,71 @@ st.markdown("""
         padding: 4px 1px !important;
         min-height: 36px !important;
         height: 36px !important;
-        font-size: 0.66rem !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.70rem !important;
         font-weight: 700 !important;
-        border-radius: 8px !important;
+        border-radius: 7px !important;
         line-height: 1 !important;
     }
 
-    /* Tabela do Calendário do Ciclo */
-    .cal-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 4px;
-        margin-top: 6px;
-    }
-    .cal-th {
-        text-align: center;
-        font-size: 0.65rem;
-        font-weight: 700;
-        color: #64748b;
-        padding: 4px 0;
-    }
-    .cal-cell {
-        background: #0d1522;
-        border: 1px solid #1a273b;
-        border-radius: 8px;
-        height: 48px;
-        vertical-align: top;
-        padding: 4px;
-        text-align: right;
-        font-size: 0.65rem;
-        font-weight: 600;
-    }
-    .cal-cell.payday { border-color: #eab308 !important; box-shadow: inset 0 0 6px rgba(234, 179, 8, 0.35); }
-    .cal-cell.today { border-color: #38bdf8 !important; box-shadow: 0 0 6px rgba(56, 189, 248, 0.4); }
-    .cal-cell.has-entrada { background: rgba(34, 197, 94, 0.16) !important; border-color: rgba(34, 197, 94, 0.65) !important; }
-    .cal-cell.has-saida { background: rgba(239, 68, 68, 0.16) !important; border-color: rgba(239, 68, 68, 0.65) !important; }
-    .cal-cell.has-reemb-livre { background: rgba(234, 179, 8, 0.16) !important; border-color: rgba(234, 179, 8, 0.75) !important; }
-    .cal-cell.has-ambos { background: rgba(245, 158, 11, 0.16) !important; border-color: rgba(245, 158, 11, 0.65) !important; }
-    .cal-badge {
-        font-size: 0.54rem;
-        font-weight: 800;
-        font-family: 'JetBrains Mono', monospace;
-        display: block;
-        text-align: left;
-        margin-top: 2px;
-        line-height: 1.1;
-    }
-    .badge-in { color: #4ade80; }
-    .badge-out { color: #f87171; }
-    .badge-reemb-livre { color: #fbbf24; }
-
-    .prev-item-card {
-        background: #0d1522;
-        border: 1px solid #1a273b;
-        border-radius: 12px;
-        padding: 10px 12px;
-        margin-bottom: 6px;
+    /* Data Rows / Ledger Style */
+    .ledger-row {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        padding: 9px 12px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--border-subtle);
+        border-radius: 9px;
+        margin-bottom: 6px;
+        transition: background 0.15s ease;
     }
-    .parcela-card {
-        background: #111a28;
-        border: 1px solid #1e2c40;
-        border-radius: 14px;
-        padding: 12px;
-        margin-bottom: 8px;
+    .ledger-row:hover {
+        background: rgba(255, 255, 255, 0.04);
     }
-    .parcela-progresso {
-        background: #1a2538;
-        height: 6px;
-        border-radius: 4px;
-        overflow: hidden;
-        margin: 8px 0;
+
+    /* Cards de Bancos */
+    .bank-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 14px;
+        margin-bottom: 10px;
     }
-    .parcela-progresso-bar {
-        background: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
-        height: 100%;
+    .bank-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .bank-stat {
+        background: #080c14;
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        padding: 8px 10px;
+    }
+    .bank-stat-lbl {
+        font-size: 0.58rem;
+        color: #64748b;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .bank-stat-val {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.90rem;
+        font-weight: 700;
+        color: #f8fafc;
+        margin-top: 2px;
+    }
+
+    /* Inputs compactos */
+    div[data-testid="stNumberInput"] input,
+    div[data-testid="stTextInput"] input {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.80rem !important;
+        background-color: #080c14 !important;
+        border-radius: 8px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1271,34 +1266,44 @@ if "modo_ciclo" not in st.session_state or st.session_state.modo_ciclo not in ["
     st.session_state.modo_ciclo = "Ciclo Completo (04 a 03)"
 
 
-# ================= NAVEGAÇÃO LATERAL (SIDEBAR NO PC / RECOLHIDA NO CELULAR) =================
+# Garante valores padrão corretos para os parâmetros da alocação (nunca 0.00 na inicialização)
+if st.session_state.get("inp_diaria_aloc", 0.0) == 0.0:
+    st.session_state.inp_diaria_aloc = 128.78
+if st.session_state.get("inp_gas_aloc", 0.0) == 0.0:
+    st.session_state.inp_gas_aloc = 30.00
+if st.session_state.get("inp_ped_aloc", 0.0) == 0.0:
+    st.session_state.inp_ped_aloc = 25.60
+
+# ================= NAVEGAÇÃO LATERAL MINIMALISTA =================
 if "menu_nav" not in st.session_state:
-    st.session_state.menu_nav = "📊 Dashboard"
+    st.session_state.menu_nav = "Overview"
 
 with st.sidebar:
     st.markdown("""
-    <div style="display:flex;align-items:center;gap:10px;padding:6px 4px 14px 4px;border-bottom:1px solid #1c283d;margin-bottom:12px;">
-        <div class="exec-logo-icon">⚡</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 4px 14px 4px;border-bottom:1px solid rgba(148,163,184,0.12);margin-bottom:12px;">
+        <div style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#38bdf8,#818cf8);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono';font-weight:800;color:#060911;font-size:0.85rem;">◈</div>
         <div>
-            <div style="font-size:1.0rem;font-weight:800;color:#ffffff;">FINANCAS.AI</div>
-            <div style="font-size:0.66rem;color:#38bdf8;font-weight:700;">Gestão & Alocações</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.88rem;font-weight:800;color:#f8fafc;letter-spacing:-0.02em;">FINANCAS.OS</div>
+            <div style="font-size:0.64rem;color:#64748b;">Terminal Financeiro</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     opcoes_menu = [
-        "📊 Dashboard",
-        "🏦 Bancos & Contas",
-        "🗓️ Calendário de Alocação",
-        "⛽ Reembolsos & KM",
-        "📅 Ciclo & Previsões",
-        "💳 Cartões & Parcelas",
-        "📄 Extrato & Lançar",
-        "⚙️ Ajustes & Backup"
+        "Overview",
+        "Bancos & Contas",
+        "Calendário de Alocação",
+        "Reembolsos & Rateio",
+        "Ciclo & Previsões",
+        "Cartões & Parcelas",
+        "Extrato & OFX",
+        "Configurações"
     ]
+    if st.session_state.menu_nav not in opcoes_menu:
+        st.session_state.menu_nav = "Overview"
+
     escolha_menu = st.radio("Navegação", opcoes_menu, index=opcoes_menu.index(st.session_state.menu_nav), label_visibility="collapsed")
     if escolha_menu != st.session_state.menu_nav:
-        # Ao trocar de tela, garante que blocos recolhíveis iniciem recolhidos (exceto calendários)
         st.session_state.mostrar_form_prev = False
         st.session_state.mostrar_calc_km = False
         st.session_state.mostrar_form_rateio = False
@@ -1309,7 +1314,7 @@ with st.sidebar:
         st.session_state.menu_nav = escolha_menu
         st.rerun()
 
-# ================= CÁLCULOS GLOBAIS DO CICLO E ALOCAÇÕES =================
+# ================= CÁLCULOS GLOBAIS =================
 dt_hero_ini, dt_hero_fim, dt_sal_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
 meses_nomes_glob = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 nome_mes_glob = meses_nomes_glob[st.session_state.cal_mes - 1]
@@ -1343,9 +1348,14 @@ if not df_reemb_itens.empty:
 renda_futura_livre = (entradas_futuras_brutas - saidas_comprometidas_ciclo) + reembolsos_livres_futuros
 projecao_com_futuro = total_saldos + renda_futura_livre
 
-# Resumo das Alocações do Mês Ativo
-dt_aloc_g_ini = date(st.session_state.cal_ano, st.session_state.cal_mes, 1).strftime("%Y-%m-%d")
-dt_aloc_g_fim = date(st.session_state.cal_ano, st.session_state.cal_mes, calendar.monthrange(st.session_state.cal_ano, st.session_state.cal_mes)[1]).strftime("%Y-%m-%d")
+# Resumo Alocações do Mês do Calendário de Alocação
+if "aloc_cal_mes" not in st.session_state:
+    st.session_state.aloc_cal_mes = st.session_state.cal_mes
+if "aloc_cal_ano" not in st.session_state:
+    st.session_state.aloc_cal_ano = st.session_state.cal_ano
+
+dt_aloc_g_ini = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, 1).strftime("%Y-%m-%d")
+dt_aloc_g_fim = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, calendar.monthrange(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)[1]).strftime("%Y-%m-%d")
 df_aloc_glob = pd.DataFrame()
 if not df_aloc.empty:
     df_aloc_glob = df_aloc[(df_aloc["data_alocacao"] >= dt_aloc_g_ini) & (df_aloc["data_alocacao"] <= dt_aloc_g_fim)]
@@ -1357,72 +1367,135 @@ tot_ped_glob = float(df_aloc_glob["valor_pedagio"].sum()) if qtd_dias_aloc_glob 
 tot_lucro_glob = tot_diarias_glob - tot_gas_glob
 tot_reemb_aloc_glob = tot_diarias_glob + tot_ped_glob
 
-# Progresso do ciclo (04 a 03)
 total_dias_ciclo = max(1, (dt_hero_fim - dt_hero_ini).days)
 dias_passados_ciclo = min(total_dias_ciclo, max(0, (hoje - dt_hero_ini).days))
 pct_ciclo = int((dias_passados_ciclo / total_dias_ciclo) * 100)
 
-# ================= BARRA SUPERIOR EXECUTIVA =================
+# ================= TOP COMMAND BAR =================
 st.markdown(f"""
-<div class="exec-topbar">
-    <div class="exec-brand">
-        <div class="exec-logo-icon">⚡</div>
+<div class="cmd-bar">
+    <div class="cmd-left">
+        <span class="cmd-badge-sys">SYS // LIVE</span>
         <div>
-            <div class="exec-title">FINANCAS.AI • {st.session_state.menu_nav}</div>
-            <div class="exec-sub">Competência {nome_mes_glob}/{st.session_state.cal_ano} ({dt_hero_ini.strftime('%d/%m')} a {dt_hero_fim.strftime('%d/%m')})</div>
+            <div class="cmd-breadcrumb">{st.session_state.menu_nav}</div>
+            <div class="cmd-meta">CICLO {nome_mes_glob.upper()}/{st.session_state.cal_ano} • {dt_hero_ini.strftime('%d/%m')} → {dt_hero_fim.strftime('%d/%m')}</div>
         </div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;">
-        <span class="exec-pill"><span class="dot-online"></span> Sincronizado</span>
-        <span class="exec-pill" style="color:#eab308;border-color:rgba(234,179,8,0.35);">💰 Dias 03 e 16</span>
+    <div class="cmd-right">
+        <span class="tele-chip"><span class="pulse-dot"></span> DB SYNC</span>
+        <span class="tele-chip">PAYDAYS: 03 & 16</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ================= GRADE DE 4 KPIs (4 COLUNAS NO PC -> 2x2 NO CELULAR) =================
+# ================= 4 KPI CARDS COM SPARKLINES SVG =================
 sinal_rf = "+" if renda_futura_livre >= 0 else "-"
-cor_rf = "#4ade80" if renda_futura_livre >= 0 else "#f87171"
+cor_rf = "#34d399" if renda_futura_livre >= 0 else "#fb7185"
+
+spark_green = '<svg width="54" height="20" viewBox="0 0 54 20" fill="none"><path d="M1 16 L12 13 L22 15 L34 7 L44 9 L53 2" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+spark_cyan = '<svg width="54" height="20" viewBox="0 0 54 20" fill="none"><path d="M1 14 L14 14 L24 10 L36 11 L45 5 L53 3" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+spark_violet = '<svg width="54" height="20" viewBox="0 0 54 20" fill="none"><path d="M1 18 L11 11 L21 12 L32 6 L43 8 L53 2" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
 st.markdown(f"""
 <div class="kpi-grid-4">
-    <div class="kpi-card accent-green">
-        <div class="kpi-lbl">💰 Patrimônio Real em Conta</div>
+    <div class="kpi-card">
+        <div class="kpi-top-row">
+            <span class="kpi-lbl">Liquidez em Conta</span>
+            <span class="kpi-tag tag-emerald">REAL</span>
+        </div>
         <div class="kpi-val">R$ {total_saldos:,.2f}</div>
-        <div class="kpi-foot"><span class="md-msg-pill {classe_total}">{msg_total}</span></div>
+        <div class="kpi-foot"><span>Saldo consolidado</span>{spark_green}</div>
     </div>
-    <div class="kpi-card accent-blue">
-        <div class="kpi-lbl">⏳ Renda Futura Livre (Ciclo)</div>
+    <div class="kpi-card">
+        <div class="kpi-top-row">
+            <span class="kpi-lbl">Renda Futura Livre</span>
+            <span class="kpi-tag tag-cyan">CICLO {pct_ciclo}%</span>
+        </div>
         <div class="kpi-val" style="color:{cor_rf};">{sinal_rf} R$ {abs(renda_futura_livre):,.2f}</div>
-        <div class="ciclo-bar-bg"><div class="ciclo-bar-fill" style="width:{pct_ciclo}%;"></div></div>
-        <div class="kpi-foot">Noção c/ futuro: <strong style="color:#e2e8f0;">R$ {projecao_com_futuro:,.2f}</strong></div>
+        <div class="thin-bar-bg"><div class="thin-bar-fill" style="width:{pct_ciclo}%;"></div></div>
+        <div class="kpi-foot"><span>Projeção: R$ {projecao_com_futuro:,.2f}</span>{spark_cyan}</div>
     </div>
-    <div class="kpi-card accent-purple">
-        <div class="kpi-lbl">🚗 Alocações ({qtd_dias_aloc_glob} dias)</div>
-        <div class="kpi-val" style="color:#38bdf8;">R$ {tot_reemb_aloc_glob:,.2f}</div>
-        <div class="kpi-foot">Lucro: <strong style="color:#4ade80;">R$ {tot_lucro_glob:,.2f}</strong> • Gas+Ped: R$ {(tot_gas_glob+tot_ped_glob):,.2f}</div>
+    <div class="kpi-card">
+        <div class="kpi-top-row">
+            <span class="kpi-lbl">Alocações ({qtd_dias_aloc_glob}d)</span>
+            <span class="kpi-tag tag-violet">KM + DIÁRIA</span>
+        </div>
+        <div class="kpi-val" style="color:#a5b4fc;">R$ {tot_reemb_aloc_glob:,.2f}</div>
+        <div class="kpi-foot"><span>Lucro: R$ {tot_lucro_glob:,.2f}</span>{spark_violet}</div>
     </div>
-    <div class="kpi-card accent-red">
-        <div class="kpi-lbl">💳 Faturas & Cheque Esp.</div>
-        <div class="kpi-val" style="color:#f87171;">R$ {total_faturas:,.2f}</div>
-        <div class="kpi-foot">Cheque Especial usado: <strong style="color:{'#f87171' if total_cheque > 0 else '#4ade80'};">R$ {total_cheque:,.2f}</strong></div>
+    <div class="kpi-card">
+        <div class="kpi-top-row">
+            <span class="kpi-lbl">Passivo Cartões</span>
+            <span class="kpi-tag tag-rose">FATURAS</span>
+        </div>
+        <div class="kpi-val" style="color:#fb7185;">R$ {total_faturas:,.2f}</div>
+        <div class="kpi-foot"><span>Cheque Esp.: R$ {total_cheque:,.2f}</span></div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ================= HELPER DO CALENDÁRIO DE ALOCAÇÃO + CALCULADORA VINCULADA =================
-def render_calendario_alocacoes_e_calc():
-    if "aloc_cal_mes" not in st.session_state:
-        st.session_state.aloc_cal_mes = st.session_state.cal_mes
-    if "aloc_cal_ano" not in st.session_state:
-        st.session_state.aloc_cal_ano = st.session_state.cal_ano
+# ================= GRÁFICO SVG TECNOLÓGICO (SUBSTITUI BAR_CHART INFANTIL) =================
+def render_tech_chart_svg():
+    st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="panel-hdr">
+        <span class="panel-hdr-title">◈ Exposição por Instituição Bancária</span>
+        <span class="panel-hdr-sub">SALDO VS. FATURA</span>
+    </div>
+    """, unsafe_allow_html=True)
 
+    max_val = max(
+        100.0,
+        float(df_bancos["saldo_conta"].max()) if not df_bancos.empty else 0.0,
+        float(df_bancos["fatura_atual"].max()) if not df_bancos.empty else 0.0,
+        float(df_bancos["cheque_especial_usado"].max()) if not df_bancos.empty else 0.0
+    )
+
+    rows_svg = []
+    for _, b in df_bancos.iterrows():
+        nome_b = str(b["banco"])
+        cor_b = str(b["cor_identificador"])
+        saldo_v = float(b["saldo_conta"])
+        fat_v = float(b["fatura_atual"])
+        chq_v = float(b["cheque_especial_usado"])
+
+        w_saldo = min(100.0, (saldo_v / max_val) * 100.0)
+        w_fat = min(100.0, (fat_v / max_val) * 100.0)
+        w_chq = min(100.0, (chq_v / max_val) * 100.0)
+
+        rows_svg.append(
+            f'<div style="margin-bottom:10px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.72rem;margin-bottom:4px;">'
+            f'<span style="font-weight:600;color:#e2e8f0;display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:2px;background:{cor_b};display:inline-block;"></span>{nome_b}</span>'
+            f'<span style="font-family:JetBrains Mono,monospace;font-size:0.66rem;color:#94a3b8;">'
+            f'<span style="color:#34d399;">+R$ {saldo_v:,.0f}</span> · <span style="color:#fb7185;">-R$ {(fat_v+chq_v):,.0f}</span>'
+            f'</span>'
+            f'</div>'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#080c14;padding:4px;border-radius:6px;border:1px solid rgba(148,163,184,0.08);">'
+            f'<div style="height:5px;background:rgba(16,185,129,0.12);border-radius:3px;overflow:hidden;"><div style="width:{w_saldo:.1f}%;height:100%;background:linear-gradient(90deg,#059669,#34d399);"></div></div>'
+            f'<div style="height:5px;background:rgba(244,63,94,0.12);border-radius:3px;overflow:hidden;"><div style="width:{max(w_fat, w_chq):.1f}%;height:100%;background:linear-gradient(90deg,#e11d48,#fb7185);"></div></div>'
+            f'</div>'
+            f'</div>'
+        )
+
+    st.markdown("".join(rows_svg), unsafe_allow_html=True)
+    st.markdown("""
+    <div style="display:flex;gap:14px;font-family:'JetBrains Mono',monospace;font-size:0.62rem;color:#64748b;margin-top:4px;">
+        <span><span style="color:#34d399;">■</span> LIQUIDEZ EM CONTA</span>
+        <span><span style="color:#fb7185;">■</span> FATURA / CHEQUE ESP.</span>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ================= HELPER CALENDÁRIO DE ALOCAÇÃO + CALCULADORA VINCULADA =================
+def render_calendario_alocacoes_e_calc():
     meses_aloc_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
     nome_m_aloc = meses_aloc_nomes[st.session_state.aloc_cal_mes - 1]
 
-    st.markdown('<div class="bento-box">', unsafe_allow_html=True)
-    ca_nav1, ca_nav2, ca_nav3 = st.columns([3.5, 1.2, 1.2])
+    st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    ca_nav1, ca_nav2, ca_nav3 = st.columns([3.8, 1.1, 1.1])
     with ca_nav1:
-        st.markdown(f'<div style="font-size:0.88rem;font-weight:800;color:#38bdf8;padding-top:4px;">🗓️ Calendário de Alocação • {nome_m_aloc}/{st.session_state.aloc_cal_ano}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="panel-hdr-title" style="padding-top:4px;">◈ Matriz de Alocação • {nome_m_aloc}/{st.session_state.aloc_cal_ano}</div>', unsafe_allow_html=True)
     with ca_nav2:
         if st.button("◀", key="aloc_m_ant", help="Mês anterior"):
             if st.session_state.aloc_cal_mes == 1:
@@ -1442,18 +1515,18 @@ def render_calendario_alocacoes_e_calc():
 
     cp_a1, cp_a2, cp_a3 = st.columns(3)
     with cp_a1:
-        val_diaria_aloc = st.number_input("Diária (R$)", min_value=0.0, step=1.0, key="inp_diaria_aloc")
+        val_diaria_aloc = st.number_input("Diária (R$)", min_value=0.0, value=float(st.session_state.inp_diaria_aloc), step=1.0, key="inp_diaria_aloc")
     with cp_a2:
-        val_gas_aloc = st.number_input("Gasolina/dia", min_value=0.0, step=1.0, key="inp_gas_aloc")
+        val_gas_aloc = st.number_input("Gasolina/dia", min_value=0.0, value=float(st.session_state.inp_gas_aloc), step=1.0, key="inp_gas_aloc")
     with cp_a3:
-        val_ped_aloc = st.number_input("Pedágio/dia", min_value=0.0, step=1.0, key="inp_ped_aloc")
+        val_ped_aloc = st.number_input("Pedágio/dia", min_value=0.0, value=float(st.session_state.inp_ped_aloc), step=1.0, key="inp_ped_aloc")
 
     datas_marcadas_set = set(df_aloc["data_alocacao"].tolist()) if not df_aloc.empty else set()
     cal_matrix = calendar.monthcalendar(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)
-    dias_hdr = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-    hdr_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin:6px 0 4px 0;">'
+    dias_hdr = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"]
+    hdr_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:8px 0 4px 0;">'
     for dh in dias_hdr:
-        hdr_html += f'<div style="text-align:center;font-size:0.64rem;font-weight:700;color:#64748b;">{dh}</div>'
+        hdr_html += f'<div style="text-align:center;font-family:JetBrains Mono,monospace;font-size:0.60rem;font-weight:700;color:#64748b;">{dh}</div>'
     hdr_html += '</div>'
     st.markdown(hdr_html, unsafe_allow_html=True)
 
@@ -1461,17 +1534,17 @@ def render_calendario_alocacoes_e_calc():
         cols_w = st.columns(7)
         for d_idx, dia_num in enumerate(semana):
             if dia_num == 0:
-                cols_w[d_idx].markdown("<div style='height:36px;background:rgba(13,21,34,0.4);border-radius:8px;'></div>", unsafe_allow_html=True)
+                cols_w[d_idx].markdown("<div style='height:36px;background:rgba(255,255,255,0.015);border:1px dashed rgba(148,163,184,0.08);border-radius:7px;'></div>", unsafe_allow_html=True)
             else:
                 dt_cell = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, dia_num)
                 dt_cell_str = dt_cell.strftime("%Y-%m-%d")
                 is_marked = (dt_cell_str in datas_marcadas_set)
-                lbl_btn = f"🚗{dia_num}" if is_marked else f"{dia_num}"
+                lbl_btn = f"● {dia_num:02d}" if is_marked else f"{dia_num:02d}"
                 if cols_w[d_idx].button(
                     lbl_btn,
                     key=f"cal_aloc_btn_{dt_cell_str}",
                     type="primary" if is_marked else "secondary",
-                    help=f"{'Remover' if is_marked else 'Marcar'} alocação em {dt_cell.strftime('%d/%m/%Y')}"
+                    help=f"{'Remover' if is_marked else 'Alocar'} dia {dt_cell.strftime('%d/%m/%Y')}"
                 ):
                     toggle_alocacao_dia(dt_cell_str, "Alocação Cliente", val_diaria_aloc, val_gas_aloc, val_ped_aloc)
                     st.rerun()
@@ -1482,7 +1555,7 @@ def render_calendario_alocacoes_e_calc():
 
     ca_act1, ca_act2 = st.columns(2)
     with ca_act1:
-        if st.button("⚡ Marcar Dias Úteis (Seg-Sex)", key="btn_marcar_uteis_aloc"):
+        if st.button("Preencher Dias Úteis (Seg–Sex)", key="btn_marcar_uteis_aloc"):
             uteis = []
             cur_d = dt_m_ini
             while cur_d <= dt_m_fim:
@@ -1493,7 +1566,7 @@ def render_calendario_alocacoes_e_calc():
             st.rerun()
     with ca_act2:
         st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
-        if st.button("🗑️ Limpar Mês", key="btn_limpar_mes_aloc"):
+        if st.button("Limpar Mês", key="btn_limpar_mes_aloc"):
             limpar_alocacoes_periodo(dt_m_ini.strftime("%Y-%m-%d"), dt_m_fim.strftime("%Y-%m-%d"))
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -1510,93 +1583,97 @@ def render_calendario_alocacoes_e_calc():
     tot_reembolso_esperado = tot_diarias_bruto + tot_ped_mes
 
     st.markdown(f"""
-    <div style="background:#0d1522;border:1px solid #1f2f47;border-radius:12px;padding:10px;margin-top:8px;">
-        <div style="font-size:0.70rem;font-weight:800;color:#38bdf8;text-transform:uppercase;">
-            📊 Resumo {nome_m_aloc} ({qtd_dias_aloc} dia(s) marcado(s)):
+    <div style="background:#080c14;border:1px solid rgba(148,163,184,0.12);border-radius:10px;padding:10px 12px;margin-top:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:0.66rem;font-weight:700;color:#38bdf8;">TELEMETRIA {nome_m_aloc.upper()}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:0.66rem;color:#94a3b8;">{qtd_dias_aloc} DIAS ALOCADOS</span>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;font-size:0.68rem;">
-            <div style="background:#111a28;padding:6px 8px;border-radius:8px;">
-                <span style="color:#94a3b8;">⛽ Gasolina:</span><br>
-                <strong style="color:#f87171;font-family:'JetBrains Mono';font-size:0.82rem;">R$ {tot_gas_mes:,.2f}</strong>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:0.66rem;">
+            <div style="background:#0e1422;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.08);">
+                <span style="color:#64748b;font-size:0.58rem;">COMBUSTÍVEL</span><br>
+                <strong style="color:#fb7185;font-family:'JetBrains Mono';font-size:0.78rem;">R$ {tot_gas_mes:,.2f}</strong>
             </div>
-            <div style="background:#111a28;padding:6px 8px;border-radius:8px;">
-                <span style="color:#94a3b8;">🛣️ Pedágios:</span><br>
-                <strong style="color:#fbbf24;font-family:'JetBrains Mono';font-size:0.82rem;">R$ {tot_ped_mes:,.2f}</strong>
+            <div style="background:#0e1422;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.08);">
+                <span style="color:#64748b;font-size:0.58rem;">PEDÁGIOS</span><br>
+                <strong style="color:#fbbf24;font-family:'JetBrains Mono';font-size:0.78rem;">R$ {tot_ped_mes:,.2f}</strong>
             </div>
-            <div style="background:#111a28;padding:6px 8px;border-radius:8px;">
-                <span style="color:#94a3b8;">💰 Lucro Líquido:</span><br>
-                <strong style="color:#4ade80;font-family:'JetBrains Mono';font-size:0.82rem;">R$ {tot_lucro_liq_aloc:,.2f}</strong>
+            <div style="background:#0e1422;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.08);">
+                <span style="color:#64748b;font-size:0.58rem;">LUCRO LÍQ.</span><br>
+                <strong style="color:#34d399;font-family:'JetBrains Mono';font-size:0.78rem;">R$ {tot_lucro_liq_aloc:,.2f}</strong>
             </div>
-            <div style="background:#111a28;padding:6px 8px;border-radius:8px;">
-                <span style="color:#94a3b8;">📥 Reembolso Total:</span><br>
-                <strong style="color:#38bdf8;font-family:'JetBrains Mono';font-size:0.82rem;">R$ {tot_reembolso_esperado:,.2f}</strong>
+            <div style="background:#0e1422;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,0.08);">
+                <span style="color:#64748b;font-size:0.58rem;">REEMBOLSO</span><br>
+                <strong style="color:#38bdf8;font-family:'JetBrains Mono';font-size:0.78rem;">R$ {tot_reembolso_esperado:,.2f}</strong>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Botão 1-Clique para jogar os valores calculados direto no Rateio de Reembolso!
     if qtd_dias_aloc > 0:
-        if st.button(f"🚀 Pré-preencher Rateio de Reembolso (R$ {tot_reembolso_esperado:,.2f})", key="btn_enviar_aloc_rateio"):
+        if st.button(f"Exportar para Rateio de Reembolso → R$ {tot_reembolso_esperado:,.2f}", key="btn_enviar_aloc_rateio"):
             st.session_state["reemb_total_val"] = round(tot_reembolso_esperado, 2)
             st.session_state["qtd_destinos"] = 3
             st.session_state["v_A"] = round(tot_ped_mes, 2)
             st.session_state["v_B"] = round(tot_gas_mes, 2)
             st.session_state["v_C"] = round(max(0.0, tot_reembolso_esperado - tot_ped_mes - tot_gas_mes), 2)
             st.session_state.mostrar_form_rateio = True
-            st.session_state.menu_nav = "⛽ Reembolsos & KM"
+            st.session_state.menu_nav = "Reembolsos & Rateio"
             st.rerun()
 
-    # Calculadora Rápida vinculada automaticamente aos valores do Calendário
+    # Calculadora Rápida vinculada
     ref_diaria_cal = float(st.session_state.get("inp_diaria_aloc", 128.78))
     ref_gas_cal = float(st.session_state.get("inp_gas_aloc", 30.00))
     ref_ped_cal = float(st.session_state.get("inp_ped_aloc", 25.60))
     dias_default_calc = qtd_dias_aloc if qtd_dias_aloc > 0 else 5
 
     btn_calc_lbl = (
-        "➖ Ocultar Calculadora Rápida"
+        "Ocultar Simulador"
         if st.session_state.mostrar_calc_km
-        else f"🧮 Calculadora Rápida (R$ {ref_diaria_cal:,.2f}/dia + R$ {ref_ped_cal:,.2f} Pedágio)"
+        else f"Simulador Rápido (Ref: R$ {ref_diaria_cal:,.2f} + R$ {ref_ped_cal:,.2f})"
     )
     if st.button(btn_calc_lbl, key="toggle_calc_km"):
         st.session_state.mostrar_calc_km = not st.session_state.mostrar_calc_km
         st.rerun()
 
     if st.session_state.mostrar_calc_km:
-        st.markdown('<div style="background:#0d1522;border:1px solid #1c2a3d;border-radius:12px;padding:10px;margin-top:6px;">', unsafe_allow_html=True)
+        st.markdown('<div style="background:#080c14;border:1px solid rgba(148,163,184,0.12);border-radius:10px;padding:10px;margin-top:6px;">', unsafe_allow_html=True)
         c_c1, c_c2 = st.columns(2)
         with c_c1:
-            dias_est = st.number_input("Dias de alocação", min_value=1, value=dias_default_calc, step=1, key="calc_dias_est")
+            dias_est = st.number_input("Dias", min_value=1, value=dias_default_calc, step=1, key="calc_dias_est")
             diaria_bruta_unit = st.number_input("Diária (R$)", min_value=0.0, value=ref_diaria_cal, step=1.0, key=f"calc_diaria_{ref_diaria_cal:.2f}")
-            gasolina_unit = st.number_input("Gasolina/dia (R$)", min_value=0.0, value=ref_gas_cal, step=1.0, key=f"calc_gas_{ref_gas_cal:.2f}")
-            pedagio_dia = st.number_input("Pedágio/dia (R$)", min_value=0.0, value=ref_ped_cal, step=1.0, key=f"calc_ped_{ref_ped_cal:.2f}")
+            gasolina_unit = st.number_input("Gasolina/dia", min_value=0.0, value=ref_gas_cal, step=1.0, key=f"calc_gas_{ref_gas_cal:.2f}")
+            pedagio_dia = st.number_input("Pedágio/dia", min_value=0.0, value=ref_ped_cal, step=1.0, key=f"calc_ped_{ref_ped_cal:.2f}")
         with c_c2:
             lucro_unit = diaria_bruta_unit - gasolina_unit
             gasolina_est = dias_est * gasolina_unit
             diarias_lucro = dias_est * lucro_unit
             pedagio_total_est = dias_est * pedagio_dia
             total_est = (dias_est * diaria_bruta_unit) + pedagio_total_est
-            st.caption(f"⛽ Gasolina: **R$ {gasolina_est:,.2f}**")
-            st.caption(f"💰 Lucro Livre: **R$ {diarias_lucro:,.2f}**")
-            st.caption(f"🛣️ Pedágios: **R$ {pedagio_total_est:,.2f}**")
-            st.markdown(f"**Total Esperado:** <span style='color:#4ade80;font-weight:800;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
+            st.caption(f"Combustível: **R$ {gasolina_est:,.2f}**")
+            st.caption(f"Lucro Líquido: **R$ {diarias_lucro:,.2f}**")
+            st.caption(f"Pedágios: **R$ {pedagio_total_est:,.2f}**")
+            st.markdown(f"**Reembolso Total:** <span style='color:#38bdf8;font-family:JetBrains Mono;font-weight:700;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ================= HELPER DO IA ADVISOR =================
+# ================= HELPER DO AI ADVISOR =================
 def render_advisor_box():
-    st.markdown('<div class="bento-box">', unsafe_allow_html=True)
-    st.markdown('<div class="bento-title"><span>🧠 Insights do IA Advisor</span><span style="font-size:0.68rem;color:#38bdf8;">Análise Inteligente</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="panel-hdr">
+        <span class="panel-hdr-title">◈ AI Financial Engine</span>
+        <span class="panel-hdr-sub">PROJEÇÃO & DIAGNÓSTICO</span>
+    </div>
+    """, unsafe_allow_html=True)
 
     total_parcelas_mes = float(df_parc["valor_parcela"].sum()) if not df_parc.empty else 0.0
     total_divida_parcelas = sum(max(0, int(r["total_parcelas"]) - int(r["parcela_atual"])) * float(r["valor_parcela"]) for _, r in df_parc.iterrows()) if not df_parc.empty else 0.0
 
-    # Projeção 6 meses
     projecoes_6m = []
     for offset_m in range(6):
         dt_ref_m = date(st.session_state.cal_ano, st.session_state.cal_mes, 1) + relativedelta(months=offset_m)
-        label_m = f"{meses_nomes_glob[dt_ref_m.month - 1][:3]}/{str(dt_ref_m.year)[2:]}"
+        label_m = f"{meses_nomes_glob[dt_ref_m.month - 1][:3].upper()}/{str(dt_ref_m.year)[2:]}"
         parc_ativas_m = 0.0
         if not df_parc.empty:
             for _, rp in df_parc.iterrows():
@@ -1607,23 +1684,21 @@ def render_advisor_box():
         projecoes_6m.append({"mes": label_m, "parcelas": parc_ativas_m, "sobra": sobra_m})
 
     cols_6m_html = "".join(
-        f'<div style="background:#0d1522;border:1px solid #1e2d44;border-radius:8px;padding:6px 3px;text-align:center;">'
-        f'<div style="font-size:0.60rem;color:#94a3b8;font-weight:700;">{p6["mes"]}</div>'
-        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.68rem;font-weight:800;color:{"#4ade80" if p6["sobra"] >= 0 else "#f87171"};margin-top:2px;">{"+" if p6["sobra"] >= 0 else ""}{p6["sobra"]:,.0f}</div>'
-        f'<div style="font-size:0.52rem;color:#64748b;">Parc:{p6["parcelas"]:,.0f}</div>'
+        f'<div style="background:#080c14;border:1px solid rgba(148,163,184,0.1);border-radius:7px;padding:6px 3px;text-align:center;">'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.58rem;color:#64748b;font-weight:700;">{p6["mes"]}</div>'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.70rem;font-weight:700;color:{"#34d399" if p6["sobra"] >= 0 else "#fb7185"};margin-top:2px;">{"+" if p6["sobra"] >= 0 else ""}{p6["sobra"]:,.0f}</div>'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.50rem;color:#475569;margin-top:1px;">P:{p6["parcelas"]:,.0f}</div>'
         f'</div>'
         for p6 in projecoes_6m
     )
     st.markdown(
-        f'<div style="background:linear-gradient(145deg,#132136 0%,#0d1624 100%);border:1px solid #2b456b;border-radius:12px;padding:10px;margin-bottom:10px;">'
-        f'<div style="font-size:0.68rem;font-weight:800;color:#38bdf8;text-transform:uppercase;">📈 Projeção de Virada (6 Meses)</div>'
-        f'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:8px;">{cols_6m_html}</div>'
+        f'<div style="background:#0a0f1a;border:1px solid rgba(56,189,248,0.18);border-radius:9px;padding:10px;margin-bottom:10px;">'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.62rem;font-weight:700;color:#38bdf8;margin-bottom:6px;">HORIZONTE DE LIQUIDEZ (6M)</div>'
+        f'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;">{cols_6m_html}</div>'
         f'</div>',
         unsafe_allow_html=True
     )
 
-    # Orientação Gasolina & Pedágio com base no Calendário de Alocações
-    custo_op_aloc = tot_gas_glob + tot_ped_glob
     contas_com_saldo = df_bancos[df_bancos["saldo_conta"] > 0].sort_values(by="saldo_conta", ascending=False)
     melhor_conta = contas_com_saldo.iloc[0] if not contas_com_saldo.empty else None
     cartoes_disp = df_bancos[df_bancos["tem_cartao"] == 1].copy()
@@ -1634,158 +1709,124 @@ def render_advisor_box():
         if not validos.empty:
             melhor_cartao = validos.iloc[0]
 
-    with st.expander("⛽ Plano Mensal de Gasolina & Pedágio (Alocações)", expanded=False):
+    with st.expander("Alocação de Capital: Gasolina & Pedágio", expanded=False):
         if qtd_dias_aloc_glob == 0:
-            st.info("Marque seus dias de alocação no Calendário para o Advisor calcular o plano exato do mês.")
+            st.caption("Marque os dias na Matriz de Alocação para gerar a estratégia.")
         else:
             st.markdown(
-                f"• **Dias marcados em {nome_mes_glob}:** {qtd_dias_aloc_glob} dia(s)<br>"
-                f"• **Gasolina:** R$ {tot_gas_glob:,.2f} • **Pedágio:** R$ {tot_ped_glob:,.2f} • **Lucro Livre:** R$ {tot_lucro_glob:,.2f}<br>"
-                f"• **Conta sugerida p/ Gasolina:** {melhor_conta['banco'] if melhor_conta is not None else 'Sem saldo em conta'}<br>"
-                f"• **Cartão sugerido p/ Pedágio:** {melhor_cartao['banco'] if melhor_cartao is not None else 'Sem limite livre'}",
+                f"• **Dias Alocados:** {qtd_dias_aloc_glob} dia(s)<br>"
+                f"• **Combustível:** R$ {tot_gas_glob:,.2f} • **Pedágio:** R$ {tot_ped_glob:,.2f} • **Lucro Líq.:** R$ {tot_lucro_glob:,.2f}<br>"
+                f"• **Fonte Combustível:** {melhor_conta['banco'] if melhor_conta is not None else 'Sem saldo em conta'}<br>"
+                f"• **Fonte Pedágio:** {melhor_cartao['banco'] if melhor_cartao is not None else 'Sem limite livre'}",
                 unsafe_allow_html=True
             )
 
-    with st.expander("🔍 Diagnóstico de Ralos & Caminho de Ajuste", expanded=False):
+    with st.expander("Auditoria de Riscos & Passivos", expanded=False):
         if total_cheque > 0:
-            st.warning(f"Prioridade #1: Zerar R$ {total_cheque:,.2f} de Cheque Especial (custo estimado de R$ {total_cheque*0.08:,.2f}/mês em juros).")
+            st.warning(f"Cheque Especial ativo: R$ {total_cheque:,.2f} (custo estimado de R$ {total_cheque*0.08:,.2f}/mês).")
         else:
-            st.success("Cheque Especial zerado! Nenhum juro rotativo ativo.")
+            st.success("Zero exposição em Cheque Especial.")
         if total_parcelas_mes > 0:
-            st.info(f"Parcelas ativas somam R$ {total_parcelas_mes:,.2f}/mês (saldo devedor total: R$ {total_divida_parcelas:,.2f}).")
+            st.info(f"Comprometimento mensal em parcelas: R$ {total_parcelas_mes:,.2f} (Passivo total: R$ {total_divida_parcelas:,.2f}).")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ================= PÁGINAS DO DASHBOARD =================
-if st.session_state.menu_nav == "📊 Dashboard":
-    # No PC: 2 colunas principais (Esquerda: Calendário de Alocação | Direita: Fluxo/Gráfico + Advisor)
-    # No Celular: Streamlit empilha automaticamente em 1 coluna responsiva!
+# ================= PÁGINAS =================
+if st.session_state.menu_nav == "Overview":
     col_main_left, col_main_right = st.columns([1.15, 1.0], gap="medium")
-
     with col_main_left:
         render_calendario_alocacoes_e_calc()
-
     with col_main_right:
-        # Gráfico de Fluxo & Comparativo por Banco
-        st.markdown('<div class="bento-box">', unsafe_allow_html=True)
-        st.markdown('<div class="bento-title"><span>📈 Fluxo de Caixa & Bancos</span><span style="font-size:0.68rem;color:#94a3b8;">Visão Comparativa</span></div>', unsafe_allow_html=True)
-        chart_df = pd.DataFrame({
-            "Banco": df_bancos["banco"],
-            "Saldo Conta": df_bancos["saldo_conta"],
-            "Fatura Cartão": df_bancos["fatura_atual"]
-        }).set_index("Banco")
-        st.bar_chart(chart_df, height=210, color=["#22c55e", "#f43f5e"])
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # IA Advisor compacto/recolhível
+        render_tech_chart_svg()
         render_advisor_box()
 
-    # Linha inferior: Transações Recentes (recolhível)
-    st.markdown('<div class="bento-box">', unsafe_allow_html=True)
-    ct1, ct2 = st.columns([4, 1.5])
+    # Ledger Recente Recolhível
+    st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    ct1, ct2 = st.columns([4, 1.2])
     with ct1:
-        st.markdown(f'<div class="bento-title" style="margin-bottom:0;"><span>🧾 Transações Recentes ({len(df_tx)})</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="panel-hdr-title">◈ Ledger de Transações ({len(df_tx)})</div>', unsafe_allow_html=True)
     with ct2:
-        lbl_rec_dash = "👁️ Mostrar" if st.session_state.recolher_extrato_lista else "🔼 Recolher"
-        if st.button(lbl_rec_dash, key="btn_rec_dash_tx"):
+        if st.button("Expandir" if st.session_state.recolher_extrato_lista else "Recolher", key="btn_rec_dash_tx"):
             st.session_state.recolher_extrato_lista = not st.session_state.recolher_extrato_lista
             st.rerun()
 
     if st.session_state.recolher_extrato_lista:
-        st.caption(f"Lista recolhida ({len(df_tx)} lançamento(s)). Clique em **👁️ Mostrar** para ver.")
+        st.caption(f"Ledger recolhido ({len(df_tx)} registros). Clique em Expandir para visualizar.")
     elif df_tx.empty:
-        st.info("Nenhuma transação registrada ainda.")
+        st.caption("Nenhuma movimentação registrada.")
     else:
         for _, row in df_tx.head(6).iterrows():
             is_s = row["tipo"] == "Saída"
             st.markdown(f"""
-            <div class="prev-item-card">
+            <div class="ledger-row">
                 <div>
-                    <div style="font-size:0.80rem;font-weight:700;color:#ffffff;">{row['descricao']}</div>
-                    <div style="font-size:0.64rem;color:#94a3b8;">{row['data']} • {row['banco']} • {row['categoria']}</div>
+                    <div style="font-size:0.78rem;font-weight:600;color:#f8fafc;">{row['descricao']}</div>
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:0.62rem;color:#64748b;">{row['data']} · {row['banco']} · {row['categoria']}</div>
                 </div>
-                <div style="font-family:'JetBrains Mono';font-weight:800;font-size:0.86rem;color:{'#f87171' if is_s else '#4ade80'};">
+                <div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:0.84rem;color:{'#fb7185' if is_s else '#34d399'};">
                     {'-' if is_s else '+'} R$ {row['valor']:,.2f}
                 </div>
             </div>
             """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-elif st.session_state.menu_nav == "🗓️ Calendário de Alocação":
+elif st.session_state.menu_nav == "Calendário de Alocação":
     render_calendario_alocacoes_e_calc()
 
-elif st.session_state.menu_nav == "🏦 Bancos & Contas":
+elif st.session_state.menu_nav == "Bancos & Contas":
     cols_b = st.columns(2, gap="medium")
     for idx_b, (_, b) in enumerate(df_bancos.iterrows()):
         with cols_b[idx_b % 2]:
             b_saldo = float(b["saldo_conta"])
-            msg_b, cls_b = get_status_saldo(b_saldo)
             tem_c = (b.get("tem_cartao", 1) == 1)
-            st.markdown('<div class="bank-card">', unsafe_allow_html=True)
+            lim_tot = float(b.get("limite_cartao", 0.0))
+            lim_lib = float(b.get("limite_liberado", 0.0))
+            lim_exib = lim_lib if lim_lib > 0 else max(0.0, lim_tot - float(b["fatura_atual"]))
             st.markdown(f"""
-            <div class="bank-card-top">
-                <span class="bank-badge"><span class="bank-dot" style="background:{b['cor_identificador']};"></span>{b['banco']}</span>
-                <span class="md-msg-pill {cls_b}">{msg_b}</span>
+            <div class="bank-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-weight:700;font-size:0.88rem;color:#f8fafc;display:flex;align-items:center;gap:8px;">
+                        <span style="width:8px;height:8px;border-radius:2px;background:{b['cor_identificador']};display:inline-block;"></span>
+                        {b['banco']}
+                    </span>
+                    <span class="kpi-tag {'tag-cyan' if tem_c else 'tag-emerald'}">{'CONTA + CRÉDITO' if tem_c else 'CONTA CORRENTE'}</span>
+                </div>
+                <div class="bank-grid">
+                    <div class="bank-stat"><div class="bank-stat-lbl">Saldo Conta</div><div class="bank-stat-val">R$ {b_saldo:,.2f}</div></div>
+                    <div class="bank-stat"><div class="bank-stat-lbl">Cheque Especial</div><div class="bank-stat-val" style="color:{'#fb7185' if b['cheque_especial_usado']>0 else '#94a3b8'};">R$ {b['cheque_especial_usado']:,.2f}</div></div>
+                    {f'<div class="bank-stat"><div class="bank-stat-lbl">Fatura (Dia {int(b.get("dia_vencimento",10))})</div><div class="bank-stat-val" style="color:#fb7185;">R$ {b["fatura_atual"]:,.2f}</div></div><div class="bank-stat"><div class="bank-stat-lbl">Limite Livre</div><div class="bank-stat-val" style="color:#34d399;">R$ {lim_exib:,.2f}</div></div>' if tem_c else ''}
+                </div>
             </div>
             """, unsafe_allow_html=True)
-            if tem_c:
-                lim_tot = float(b.get("limite_cartao", 0.0))
-                lim_lib = float(b.get("limite_liberado", 0.0))
-                lim_exib = lim_lib if lim_lib > 0 else max(0.0, lim_tot - float(b["fatura_atual"]))
-                st.markdown(f"""
-                <div class="bank-grid">
-                    <div class="bank-stat"><div class="bank-stat-lbl">Saldo Conta</div><div class="bank-stat-val">R$ {b_saldo:,.2f}</div></div>
-                    <div class="bank-stat"><div class="bank-stat-lbl">Fatura Atual (Dia {int(b.get('dia_vencimento',10))})</div><div class="bank-stat-val" style="color:#38bdf8;">R$ {b['fatura_atual']:,.2f}</div></div>
-                    <div class="bank-stat"><div class="bank-stat-lbl">Limite Liberado</div><div class="bank-stat-val" style="color:#4ade80;">R$ {lim_exib:,.2f}</div></div>
-                    <div class="bank-stat"><div class="bank-stat-lbl">Cheque Especial</div><div class="bank-stat-val" style="color:{'#f87171' if b['cheque_especial_usado']>0 else '#94a3b8'};">R$ {b['cheque_especial_usado']:,.2f}</div></div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div class="bank-grid">
-                    <div class="bank-stat"><div class="bank-stat-lbl">Saldo Conta</div><div class="bank-stat-val">R$ {b_saldo:,.2f}</div></div>
-                    <div class="bank-stat"><div class="bank-stat-lbl">Cheque Especial</div><div class="bank-stat-val" style="color:{'#f87171' if b['cheque_especial_usado']>0 else '#94a3b8'};">R$ {b['cheque_especial_usado']:,.2f}</div></div>
-                </div>
-                """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
 
-elif st.session_state.menu_nav == "⛽ Reembolsos & KM":
-    st.markdown('<div class="bento-box">', unsafe_allow_html=True)
-    btn_rat = "➖ Ocultar Formulário de Rateio" if st.session_state.mostrar_form_rateio else "🎯 Lançar / Destinar Reembolso (Rateio)"
-    if st.button(btn_rat, key="toggle_rat_page"):
+elif st.session_state.menu_nav == "Reembolsos & Rateio":
+    st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    if st.button("Ocultar Formulário" if st.session_state.mostrar_form_rateio else "Novo Rateio de Reembolso", key="toggle_rat_page"):
         st.session_state.mostrar_form_rateio = not st.session_state.mostrar_form_rateio
         st.rerun()
 
     if st.session_state.mostrar_form_rateio:
-        if "qtd_destinos" not in st.session_state:
-            st.session_state.qtd_destinos = 2
-        if "reemb_total_val" not in st.session_state:
-            st.session_state["reemb_total_val"] = 617.00
-        if "v_A" not in st.session_state:
-            st.session_state["v_A"] = 150.00
-        if "v_B" not in st.session_state:
-            st.session_state["v_B"] = round(max(0.0, st.session_state["reemb_total_val"] - st.session_state["v_A"]), 2)
+        if "qtd_destinos" not in st.session_state: st.session_state.qtd_destinos = 2
+        if "reemb_total_val" not in st.session_state: st.session_state["reemb_total_val"] = 617.00
+        if "v_A" not in st.session_state: st.session_state["v_A"] = 150.00
+        if "v_B" not in st.session_state: st.session_state["v_B"] = round(max(0.0, st.session_state["reemb_total_val"] - st.session_state["v_A"]), 2)
         for l_i in ["C", "D", "E"]:
-            if f"v_{l_i}" not in st.session_state:
-                st.session_state[f"v_{l_i}"] = 0.0
+            if f"v_{l_i}" not in st.session_state: st.session_state[f"v_{l_i}"] = 0.0
 
         def recalc_dest():
             qtd = st.session_state.get("qtd_destinos", 2)
             tot = float(st.session_state.get("reemb_total_val", 0.0))
             lets = ["A", "B", "C", "D", "E"]
-            if qtd == 1:
-                st.session_state["v_A"] = round(tot, 2)
+            if qtd == 1: st.session_state["v_A"] = round(tot, 2)
             else:
                 s_ant = sum(float(st.session_state.get(f"v_{lets[i]}", 0.0)) for i in range(qtd - 1))
                 st.session_state[f"v_{lets[qtd-1]}"] = round(max(0.0, tot - s_ant), 2)
 
         c_q1, c_q2 = st.columns(2)
-        with c_q1:
-            data_receb = st.date_input("Data Recebimento", value=date.today(), key="reemb_dt_pg")
-        with c_q2:
-            val_tot_r = st.number_input("Valor Total (R$)", min_value=0.01, step=10.0, key="reemb_total_val", on_change=recalc_dest)
+        with c_q1: data_receb = st.date_input("Data Recebimento", value=date.today(), key="reemb_dt_pg")
+        with c_q2: val_tot_r = st.number_input("Valor Total (R$)", min_value=0.01, step=10.0, key="reemb_total_val", on_change=recalc_dest)
 
-        qtd_esc = st.selectbox("Quantos destinos ratear?", [1, 2, 3, 4, 5], index=[1, 2, 3, 4, 5].index(st.session_state.qtd_destinos))
+        qtd_esc = st.selectbox("Destinos", [1, 2, 3, 4, 5], index=[1, 2, 3, 4, 5].index(st.session_state.qtd_destinos))
         if qtd_esc != st.session_state.qtd_destinos:
             st.session_state.qtd_destinos = qtd_esc
             recalc_dest()
@@ -1799,130 +1840,93 @@ elif st.session_state.menu_nav == "⛽ Reembolsos & KM":
             lt = lets[i]
             is_ult = (i == st.session_state.qtd_destinos - 1)
             c1, c2, c3 = st.columns([1.3, 1, 1.5])
-            with c1:
-                bd = st.selectbox(f"Banco ({lt})", b_list, index=min(i, len(b_list)-1), key=f"b_{lt}")
-            with c2:
-                vd = st.number_input(f"Valor ({lt})", min_value=0.0, step=10.0, key=f"v_{lt}", on_change=(recalc_dest if not is_ult else None))
-            with c3:
-                ad = st.selectbox(f"Ação ({lt})", ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], index=min(i, 2), key=f"ac_{lt}")
+            with c1: bd = st.selectbox(f"Banco ({lt})", b_list, index=min(i, len(b_list)-1), key=f"b_{lt}")
+            with c2: vd = st.number_input(f"Valor ({lt})", min_value=0.0, step=10.0, key=f"v_{lt}", on_change=(recalc_dest if not is_ult else None))
+            with c3: ad = st.selectbox(f"Ação ({lt})", ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], index=min(i, 2), key=f"ac_{lt}")
             md = st.text_input(f"Motivo ({lt})", value=mots[i], key=f"m_{lt}")
             dests.append({"banco": bd, "acao": ad, "valor": vd, "motivo": md})
 
-        if st.button("🚀 Confirmar Rateio de Reembolso", type="primary"):
+        if st.button("Executar Rateio", type="primary"):
             ativos = [d for d in dests if d["valor"] > 0]
             if ativos:
                 aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), val_tot_r, ativos, efetivar_agora=(data_receb <= date.today()))
                 st.session_state.mostrar_form_rateio = False
-                st.success("Reembolso registrado!")
                 st.rerun()
 
-    # Lista recolhível de destinações ativas
     df_itens_hist = get_reembolsos_itens()
     if not df_itens_hist.empty:
-        cda1, cda2 = st.columns([4, 1.5])
-        with cda1:
-            st.markdown(f'<div class="bento-title" style="margin-top:10px;"><span>Destinações Ativas ({len(df_itens_hist)})</span></div>', unsafe_allow_html=True)
+        cda1, cda2 = st.columns([4, 1.2])
+        with cda1: st.markdown(f'<div class="panel-hdr-title" style="margin-top:10px;">◈ Destinações Ativas ({len(df_itens_hist)})</div>', unsafe_allow_html=True)
         with cda2:
-            if st.button("👁️ Mostrar" if st.session_state.recolher_dest_reemb else "🔼 Recolher", key="rec_da_pg"):
+            if st.button("Expandir" if st.session_state.recolher_dest_reemb else "Recolher", key="rec_da_pg"):
                 st.session_state.recolher_dest_reemb = not st.session_state.recolher_dest_reemb
                 st.rerun()
         if not st.session_state.recolher_dest_reemb:
             for _, item in df_itens_hist.iterrows():
                 ci, cb = st.columns([4.5, 1])
                 with ci:
-                    st.markdown(f'<div class="prev-item-card"><div><strong>{item["banco"]}</strong> • {item["motivo"]}<br><span style="font-size:0.65rem;color:#94a3b8;">{item["data"]} • {item["acao"]}</span></div><div style="font-family:JetBrains Mono;font-weight:800;color:#4ade80;">R$ {item["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="ledger-row"><div><strong>{item["banco"]}</strong> · {item["motivo"]}<br><span style="font-size:0.64rem;color:#64748b;">{item["data"]} · {item["acao"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:#34d399;">R$ {item["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
                 with cb:
-                    if st.button("↩️", key=f"est_pg_{item['id']}"):
+                    if st.button("Estornar", key=f"est_pg_{item['id']}"):
                         estornar_item_destino(item["id"])
                         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-elif st.session_state.menu_nav == "📅 Ciclo & Previsões":
-    st.markdown('<div class="bento-box">', unsafe_allow_html=True)
-    st.markdown(f'<div class="bento-title"><span>📅 Ciclo {nome_mes_glob}/{st.session_state.cal_ano} ({dt_hero_ini.strftime("%d/%m")} a {dt_hero_fim.strftime("%d/%m")})</span></div>', unsafe_allow_html=True)
-    cn1, cn2, cn3 = st.columns([3, 1, 1])
-    with cn2:
-        if st.button("◀", key="cic_ant_pg"):
-            st.session_state.cal_mes = 12 if st.session_state.cal_mes == 1 else st.session_state.cal_mes - 1
-            if st.session_state.cal_mes == 12: st.session_state.cal_ano -= 1
-            st.rerun()
-    with cn3:
-        if st.button("▶", key="cic_prox_pg"):
-            st.session_state.cal_mes = 1 if st.session_state.cal_mes == 12 else st.session_state.cal_mes + 1
-            if st.session_state.cal_mes == 1: st.session_state.cal_ano += 1
-            st.rerun()
-
-    df_prev_c = pd.DataFrame()
-    if not df_prev.empty:
-        df_prev_c = df_prev[df_prev["data_prevista"].apply(lambda d: dt_hero_ini <= datetime.strptime(d, "%Y-%m-%d").date() <= dt_hero_fim)]
-
-    clc1, clc2 = st.columns([4, 1.5])
-    with clc1:
-        st.markdown(f"**Lançamentos do Ciclo ({len(df_prev_c)})**")
+elif st.session_state.menu_nav == "Ciclo & Previsões":
+    st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    st.markdown(f'<div class="panel-hdr-title">◈ Ciclo {nome_mes_glob}/{st.session_state.cal_ano} ({dt_hero_ini.strftime("%d/%m")} → {dt_hero_fim.strftime("%d/%m")})</div>', unsafe_allow_html=True)
+    df_prev_c = df_prev[df_prev["data_prevista"].apply(lambda d: dt_hero_ini <= datetime.strptime(d, "%Y-%m-%d").date() <= dt_hero_fim)] if not df_prev.empty else pd.DataFrame()
+    clc1, clc2 = st.columns([4, 1.2])
+    with clc1: st.markdown(f"**Lançamentos do Ciclo ({len(df_prev_c)})**")
     with clc2:
-        if st.button("👁️ Mostrar" if st.session_state.recolher_lanc_ciclo else "🔼 Recolher", key="rec_lc_pg"):
+        if st.button("Expandir" if st.session_state.recolher_lanc_ciclo else "Recolher", key="rec_lc_pg"):
             st.session_state.recolher_lanc_ciclo = not st.session_state.recolher_lanc_ciclo
             st.rerun()
-
     if not st.session_state.recolher_lanc_ciclo:
         for _, rp in df_prev_c.iterrows():
             is_e = rp["tipo"] == "Entrada"
             c1, c2, c3 = st.columns([4, 1, 1])
-            with c1:
-                st.markdown(f'<div class="prev-item-card"><div><strong>{rp["descricao"]}</strong><br><span style="font-size:0.65rem;color:#94a3b8;">{rp["data_prevista"]} • {rp["banco"]}</span></div><div style="font-family:JetBrains Mono;font-weight:800;color:{"#4ade80" if is_e else "#f87171"};">{"+" if is_e else "-"} R$ {rp["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+            with c1: st.markdown(f'<div class="ledger-row"><div><strong>{rp["descricao"]}</strong><br><span style="font-size:0.64rem;color:#64748b;">{rp["data_prevista"]} · {rp["banco"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{"#34d399" if is_e else "#fb7185"};">{"+" if is_e else "-"} R$ {rp["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
             with c2:
-                if st.button("✅", key=f"ef_pg_{rp['id']}"):
+                if st.button("Baixar", key=f"ef_pg_{rp['id']}"):
                     efetivar_previsto(rp["id"])
                     st.rerun()
             with c3:
-                if st.button("🗑️", key=f"dl_pg_{rp['id']}"):
+                if st.button("Excluir", key=f"dl_pg_{rp['id']}"):
                     remover_previsto(rp["id"])
                     st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-elif st.session_state.menu_nav == "💳 Cartões & Parcelas":
-    st.markdown('<div class="bento-box">', unsafe_allow_html=True)
-    cpl1, cpl2 = st.columns([4, 1.5])
-    with cpl1:
-        st.markdown(f'<div class="bento-title"><span>💳 Compras Parceladas ({len(df_parc)})</span></div>', unsafe_allow_html=True)
+elif st.session_state.menu_nav == "Cartões & Parcelas":
+    st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    cpl1, cpl2 = st.columns([4, 1.2])
+    with cpl1: st.markdown(f'<div class="panel-hdr-title">◈ Compras Parceladas ({len(df_parc)})</div>', unsafe_allow_html=True)
     with cpl2:
-        if st.button("👁️ Mostrar" if st.session_state.recolher_parc_lista else "🔼 Recolher", key="rec_pl_pg"):
+        if st.button("Expandir" if st.session_state.recolher_parc_lista else "Recolher", key="rec_pl_pg"):
             st.session_state.recolher_parc_lista = not st.session_state.recolher_parc_lista
             st.rerun()
-
-    if st.session_state.recolher_parc_lista:
-        st.caption(f"Lista recolhida ({len(df_parc)} compra(s)). Clique em **👁️ Mostrar** para ver.")
-    else:
+    if not st.session_state.recolher_parc_lista:
         for _, rpc in df_parc.iterrows():
             pct = min(100.0, (rpc["parcela_atual"] / max(1, rpc["total_parcelas"])) * 100)
-            st.markdown(f"""
-            <div class="parcela-card">
-                <div style="display:flex;justify-content:space-between;">
-                    <strong>{rpc['descricao']} ({rpc['banco']})</strong>
-                    <span style="color:#38bdf8;font-family:'JetBrains Mono';font-weight:800;">R$ {rpc['valor_parcela']:,.2f}/mês</span>
-                </div>
-                <div class="parcela-progresso"><div class="parcela-progresso-bar" style="width:{pct:.0f}%;"></div></div>
-                <div style="font-size:0.68rem;color:#94a3b8;">Parcela {rpc['parcela_atual']}/{rpc['total_parcelas']} • Término: {rpc['mes_ano_fim']}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div class="ledger-row"><div><strong>{rpc["descricao"]} ({rpc["banco"]})</strong><br><span style="font-size:0.64rem;color:#64748b;">Parcela {rpc["parcela_atual"]}/{rpc["total_parcelas"]} · Fim {rpc["mes_ano_fim"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:#38bdf8;">R$ {rpc["valor_parcela"]:,.2f}</div></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-elif st.session_state.menu_nav == "📄 Extrato & Lançar":
-    st.markdown('<div class="bento-box">', unsafe_allow_html=True)
-    st.markdown(f'<div class="bento-title"><span>📄 Extrato Completo ({len(df_tx)})</span></div>', unsafe_allow_html=True)
-    if st.button("👁️ Mostrar Extrato" if st.session_state.recolher_extrato_lista else "🔼 Recolher Extrato", key="rec_ext_pg"):
+elif st.session_state.menu_nav == "Extrato & OFX":
+    st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    st.markdown(f'<div class="panel-hdr-title">◈ Extrato Completo ({len(df_tx)})</div>', unsafe_allow_html=True)
+    if st.button("Expandir Extrato" if st.session_state.recolher_extrato_lista else "Recolher Extrato", key="rec_ext_pg"):
         st.session_state.recolher_extrato_lista = not st.session_state.recolher_extrato_lista
         st.rerun()
     if not st.session_state.recolher_extrato_lista:
         for _, row in df_tx.iterrows():
             is_s = row["tipo"] == "Saída"
-            st.markdown(f'<div class="prev-item-card"><div><strong>{row["descricao"]}</strong><br><span style="font-size:0.64rem;color:#94a3b8;">{row["data"]} • {row["banco"]} ({row["meio"]})</span></div><div style="font-family:JetBrains Mono;font-weight:800;color:{"#f87171" if is_s else "#4ade80"};">{"-" if is_s else "+"} R$ {row["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="ledger-row"><div><strong>{row["descricao"]}</strong><br><span style="font-size:0.64rem;color:#64748b;">{row["data"]} · {row["banco"]} ({row["meio"]})</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{"#fb7185" if is_s else "#34d399"};">{"-" if is_s else "+"} R$ {row["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-elif st.session_state.menu_nav == "⚙️ Ajustes & Backup":
-    st.markdown('<div class="bento-box">', unsafe_allow_html=True)
-    st.markdown('<div class="bento-title"><span>⚙️ Backup & Segurança</span></div>', unsafe_allow_html=True)
+elif st.session_state.menu_nav == "Configurações":
+    st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-hdr-title">◈ Backup & Persistência</div>', unsafe_allow_html=True)
     if os.path.exists("financas.db"):
         with open("financas.db", "rb") as f_db:
-            st.download_button("📥 Baixar Backup (.db)", data=f_db.read(), file_name=f"backup_financas_{datetime.now().strftime('%Y_%m_%d')}.db", mime="application/octet-stream")
+            st.download_button("Exportar Database (.db)", data=f_db.read(), file_name=f"backup_financas_{datetime.now().strftime('%Y_%m_%d')}.db", mime="application/octet-stream")
     st.markdown('</div>', unsafe_allow_html=True)
