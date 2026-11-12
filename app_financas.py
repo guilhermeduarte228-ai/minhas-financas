@@ -482,6 +482,10 @@ def init_db():
     t_cols = [col[1] for col in c.fetchall()]
     if "fitid" not in t_cols:
         c.execute("ALTER TABLE transacoes ADD COLUMN fitid TEXT DEFAULT ''")
+    c.execute("PRAGMA table_info(reembolsos_destinados_itens)")
+    r_cols = [col[1] for col in c.fetchall()]
+    if "status" not in r_cols:
+        c.execute("ALTER TABLE reembolsos_destinados_itens ADD COLUMN status TEXT DEFAULT 'Efetivado'")
 
     c.execute("UPDATE contas_bancarias SET banco = 'Itaú', cor_identificador = '#ec7000' WHERE banco = 'Inter'")
     c.execute("UPDATE transacoes SET banco = 'Itaú' WHERE banco = 'Inter'")
@@ -764,10 +768,11 @@ def adicionar_transacao(data, desc, valor, cat, banco, meio, tipo):
     conn.commit()
     conn.close()
 
-def aplicar_destinacao_reembolso(data_str, valor_total, lista_destinos):
+def aplicar_destinacao_reembolso(data_str, valor_total, lista_destinos, efetivar_agora=True):
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     logs = []
+    status_str = "Efetivado" if efetivar_agora else "Previsto"
     
     c.execute("INSERT INTO reembolsos_destinados (data, valor_total, detalhes) VALUES (?, ?, ?)", (data_str, valor_total, ""))
     reemb_id = c.lastrowid
@@ -781,33 +786,34 @@ def aplicar_destinacao_reembolso(data_str, valor_total, lista_destinos):
         if val <= 0:
             continue
             
-        logs.append(f"{banco}: R$ {val:,.2f} ({motivo} -> {acao})")
+        logs.append(f"{banco}: R$ {val:,.2f} ({motivo} -> {acao}) [{status_str}]")
         
         c.execute("""
-            INSERT INTO reembolsos_destinados_itens (reembolso_id, data, banco, acao, valor, motivo, estornado)
-            VALUES (?, ?, ?, ?, ?, ?, 0)
-        """, (reemb_id, data_str, banco, acao, val, motivo))
+            INSERT INTO reembolsos_destinados_itens (reembolso_id, data, banco, acao, valor, motivo, estornado, status)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+        """, (reemb_id, data_str, banco, acao, val, motivo, status_str))
         
-        if acao == "Abater Cheque Especial":
-            c.execute("UPDATE contas_bancarias SET cheque_especial_usado = MAX(0.0, cheque_especial_usado - ?) WHERE banco = ?", (val, banco))
-            c.execute("""
-                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
-                VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Abate Cheque Especial')
-            """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
-            
-        elif acao == "Pagar/Abater Fatura de Cartão":
-            c.execute("UPDATE contas_bancarias SET fatura_atual = MAX(0.0, fatura_atual - ?) WHERE banco = ?", (val, banco))
-            c.execute("""
-                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
-                VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Pagamento de Fatura')
-            """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
-            
-        elif acao == "Creditar em Conta Corrente":
-            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta + ? WHERE banco = ?", (val, banco))
-            c.execute("""
-                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
-                VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Conta Corrente / Pix')
-            """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
+        if efetivar_agora:
+            if acao == "Abater Cheque Especial":
+                c.execute("UPDATE contas_bancarias SET cheque_especial_usado = MAX(0.0, cheque_especial_usado - ?) WHERE banco = ?", (val, banco))
+                c.execute("""
+                    INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                    VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Abate Cheque Especial')
+                """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
+                
+            elif acao == "Pagar/Abater Fatura de Cartão":
+                c.execute("UPDATE contas_bancarias SET fatura_atual = MAX(0.0, fatura_atual - ?) WHERE banco = ?", (val, banco))
+                c.execute("""
+                    INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                    VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Pagamento de Fatura')
+                """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
+                
+            elif acao == "Creditar em Conta Corrente":
+                c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta + ? WHERE banco = ?", (val, banco))
+                c.execute("""
+                    INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                    VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Conta Corrente / Pix')
+                """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
 
     detalhe_geral = " | ".join(logs)
     c.execute("UPDATE reembolsos_destinados SET detalhes = ? WHERE id = ?", (detalhe_geral, reemb_id))
@@ -815,43 +821,74 @@ def aplicar_destinacao_reembolso(data_str, valor_total, lista_destinos):
     conn.commit()
     conn.close()
 
+def efetivar_reembolso_item(id_item):
+    id_item = int(id_item)
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("SELECT banco, acao, valor, motivo, estornado, status FROM reembolsos_destinados_itens WHERE id = ?", (id_item,))
+    row = c.fetchone()
+    if row and row[4] == 0 and row[5] == "Previsto":
+        banco, acao, val, motivo, _, _ = row
+        val = float(val)
+        if acao == "Abater Cheque Especial":
+            c.execute("UPDATE contas_bancarias SET cheque_especial_usado = MAX(0.0, cheque_especial_usado - ?) WHERE banco = ?", (val, banco))
+            c.execute("""
+                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Abate Cheque Especial')
+            """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
+        elif acao == "Pagar/Abater Fatura de Cartão":
+            c.execute("UPDATE contas_bancarias SET fatura_atual = MAX(0.0, fatura_atual - ?) WHERE banco = ?", (val, banco))
+            c.execute("""
+                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Pagamento de Fatura')
+            """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
+        elif acao == "Creditar em Conta Corrente":
+            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta + ? WHERE banco = ?", (val, banco))
+            c.execute("""
+                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Conta Corrente / Pix')
+            """, (datetime.now().strftime("%d/%m %H:%M"), f"Reembolso: {motivo}", val, banco))
+        c.execute("UPDATE reembolsos_destinados_itens SET status = 'Efetivado' WHERE id = ?", (id_item,))
+    conn.commit()
+    conn.close()
+
 def estornar_item_destino(id_item):
     id_item = int(id_item)
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
-    c.execute("SELECT banco, acao, valor, motivo, estornado, reembolso_id FROM reembolsos_destinados_itens WHERE id = ?", (id_item,))
+    c.execute("SELECT banco, acao, valor, motivo, estornado, reembolso_id, status FROM reembolsos_destinados_itens WHERE id = ?", (id_item,))
     row = c.fetchone()
     if row and row[4] == 0:
-        banco, acao, val, motivo, _, reemb_id = row
+        banco, acao, val, motivo, _, reemb_id, st_atual = row
         val = float(val)
         
-        if acao == "Abater Cheque Especial":
-            c.execute("UPDATE contas_bancarias SET cheque_especial_usado = cheque_especial_usado + ? WHERE banco = ?", (val, banco))
-            c.execute("""
-                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
-                VALUES (?, ?, ?, 'Estorno Reembolso', 'Saída', ?, 'Estorno Abate Cheque')
-            """, (datetime.now().strftime("%d/%m %H:%M"), f"Estorno: {motivo}", val, banco))
-            
-        elif acao == "Pagar/Abater Fatura de Cartão":
-            c.execute("UPDATE contas_bancarias SET fatura_atual = fatura_atual + ? WHERE banco = ?", (val, banco))
-            c.execute("""
-                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
-                VALUES (?, ?, ?, 'Estorno Reembolso', 'Saída', ?, 'Estorno Pagamento Fatura')
-            """, (datetime.now().strftime("%d/%m %H:%M"), f"Estorno: {motivo}", val, banco))
-            
-        elif acao == "Creditar em Conta Corrente":
-            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (val, banco))
-            c.execute("""
-                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
-                VALUES (?, ?, ?, 'Estorno Reembolso', 'Saída', ?, 'Estorno Crédito Conta')
-            """, (datetime.now().strftime("%d/%m %H:%M"), f"Estorno: {motivo}", val, banco))
+        if st_atual == "Efetivado":
+            if acao == "Abater Cheque Especial":
+                c.execute("UPDATE contas_bancarias SET cheque_especial_usado = cheque_especial_usado + ? WHERE banco = ?", (val, banco))
+                c.execute("""
+                    INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                    VALUES (?, ?, ?, 'Estorno Reembolso', 'Saída', ?, 'Estorno Abate Cheque')
+                """, (datetime.now().strftime("%d/%m %H:%M"), f"Estorno: {motivo}", val, banco))
+                
+            elif acao == "Pagar/Abater Fatura de Cartão":
+                c.execute("UPDATE contas_bancarias SET fatura_atual = fatura_atual + ? WHERE banco = ?", (val, banco))
+                c.execute("""
+                    INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                    VALUES (?, ?, ?, 'Estorno Reembolso', 'Saída', ?, 'Estorno Pagamento Fatura')
+                """, (datetime.now().strftime("%d/%m %H:%M"), f"Estorno: {motivo}", val, banco))
+                
+            elif acao == "Creditar em Conta Corrente":
+                c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (val, banco))
+                c.execute("""
+                    INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                    VALUES (?, ?, ?, 'Estorno Reembolso', 'Saída', ?, 'Estorno Crédito Conta')
+                """, (datetime.now().strftime("%d/%m %H:%M"), f"Estorno: {motivo}", val, banco))
 
         c.execute("UPDATE reembolsos_destinados_itens SET estornado = 1 WHERE id = ?", (id_item,))
         c.execute("UPDATE reembolsos_destinados SET valor_total = MAX(0.0, valor_total - ?) WHERE id = ?", (val, reemb_id))
         
     conn.commit()
     conn.close()
-
 
 def gerar_relatorio_pdf(dados_bancos, entradas_m, saidas_m, saldo_proj, total_parc_m, total_rest_parc, diagnosticos_texto):
     tot_saldo = dados_bancos["saldo_conta"].sum()
@@ -1067,13 +1104,46 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Master Hero Card
+# Calcula Renda Futura do Ciclo Ativo (04/MM a 03/MM+1)
+dt_hero_ini, dt_hero_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
+renda_futura_prev = 0.0
+if not df_prev.empty:
+    for _, r_p in df_prev.iterrows():
+        if r_p["tipo"] == "Entrada":
+            try:
+                d_p = datetime.strptime(r_p["data_prevista"], "%Y-%m-%d").date()
+                if dt_hero_ini <= d_p <= dt_hero_fim:
+                    renda_futura_prev += float(r_p["valor"])
+            except:
+                pass
+
+reembolsos_futuros_prev = 0.0
+if not df_reemb_itens.empty:
+    for _, r_ri in df_reemb_itens.iterrows():
+        if r_ri.get("status", "Efetivado") == "Previsto":
+            reembolsos_futuros_prev += float(r_ri["valor"])
+
+total_renda_futura = renda_futura_prev + reembolsos_futuros_prev
+projecao_com_futuro = total_saldos + total_renda_futura
+
+# Master Hero Card com Separação Clara: Patrimônio Real vs Renda Futura
 st.markdown(f"""
 <div class="md-hero-card">
-    <div class="md-hero-label">Patrimônio em Conta</div>
-    <div class="md-hero-val">R$ {total_saldos:,.2f}</div>
-    <div class="md-msg-pill {classe_total}">{msg_total}</div>
-    <div class="md-hero-footer">
+    <div style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 10px; align-items: start;">
+        <div>
+            <div class="md-hero-label">Patrimônio Real em Conta</div>
+            <div class="md-hero-val" style="font-size: 1.75rem; margin: 4px 0 8px 0;">R$ {total_saldos:,.2f}</div>
+            <div class="md-msg-pill {classe_total}" style="margin-bottom: 0; font-size: 0.66rem;">{msg_total}</div>
+        </div>
+        <div style="background: rgba(56, 189, 248, 0.08); border: 1px dashed rgba(56, 189, 248, 0.35); border-radius: 14px; padding: 10px;">
+            <div style="font-size: 0.60rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">⏳ Renda Futura (A Receber)</div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.15rem; font-weight: 800; color: #4ade80; margin: 4px 0;">+ R$ {total_renda_futura:,.2f}</div>
+            <div style="font-size: 0.60rem; color: #94a3b8; line-height: 1.25;">
+                Ainda não é patrimônio.<br>Noção c/ futuro: <strong style="color: #e2e8f0;">R$ {projecao_com_futuro:,.2f}</strong>
+            </div>
+        </div>
+    </div>
+    <div class="md-hero-footer" style="margin-top: 12px;">
         <span>Faturas Cartão: <strong style="color: #ffffff;">R$ {total_faturas:,.2f}</strong></span>
         <span>Cheque Esp.: <strong style="color: #f87171;">R$ {total_cheque:,.2f}</strong></span>
     </div>
@@ -1592,9 +1662,17 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
 
     st.markdown('<div style="background: #0d1522; border: 1px solid #1e2d44; border-radius: 14px; padding: 12px; margin-top: 8px; margin-bottom: 12px;">', unsafe_allow_html=True)
     st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #ffffff; margin-bottom: 8px;">1. Entrada Total de Reembolso Recebido:</div>', unsafe_allow_html=True)
+    status_reemb_sel = st.radio(
+        "Status deste Reembolso:",
+        ["⏳ Reembolso Futuro (Ainda vai cair na conta)", "✅ Já Caiu na Conta Agora"],
+        horizontal=True,
+        key="radio_status_reemb"
+    )
+    is_reemb_efetivado = ("Já Caiu" in status_reemb_sel)
+
     c_v1, c_v2 = st.columns(2)
     with c_v1:
-        data_receb = st.date_input("Data do Recebimento", value=date.today(), key="reemb_data_input")
+        data_receb = st.date_input("Data Prevista / Recebimento", value=date.today(), key="reemb_data_input")
     with c_v2:
         valor_total_recebido = st.number_input(
             "Valor Total que Caiu (R$)", 
@@ -1681,74 +1759,218 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
         if not destinos_ativos:
             st.error("Informe um valor maior que zero em pelo menos um destino!")
         else:
-            aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), valor_total_recebido, destinos_ativos)
-            st.success(f"Reembolso de R$ {valor_total_recebido:,.2f} lançado e rateado com sucesso em {len(destinos_ativos)} destino(s)!")
+            aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), valor_total_recebido, destinos_ativos, efetivar_agora=is_reemb_efetivado)
+            if is_reemb_efetivado:
+                st.success(f"Reembolso de R$ {valor_total_recebido:,.2f} efetivado nos saldos e faturas!")
+            else:
+                st.success(f"Reembolso futuro de R$ {valor_total_recebido:,.2f} agendado! Consulte o 🧠 Advisor para ver a melhor recomendação de alocação.")
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Histórico de Destinações com Estorno Individual
+    # Histórico de Destinações com Estorno Individual e Baixa de Previstos
     df_itens_hist = get_reembolsos_itens()
     if not df_itens_hist.empty:
-        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Destinações Ativas (Estorno Individual):</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Destinações Ativas (Baixa & Estorno Individual):</div>', unsafe_allow_html=True)
         for _, item in df_itens_hist.iterrows():
-            c_info_d, c_btn_est = st.columns([4.2, 1.8])
+            st_item = item.get("status", "Efetivado")
+            badge_st = "⏳ Previsto" if st_item == "Previsto" else "✅ Efetivado"
+            cor_st = "#eab308" if st_item == "Previsto" else "#4ade80"
+            c_info_d, c_btn_est = st.columns([3.8, 2.2])
             with c_info_d:
                 st.markdown(f"""
-                <div style="background: #0d1522; border: 1px solid #1a273b; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px;">
+                <div style="background: #0d1522; border: 1px solid #1a273b; border-left: 3px solid {cor_st}; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px;">
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="font-weight: 700; color: #ffffff; font-size: 0.78rem;">{item['banco']} • {item['acao']}</span>
-                        <span style="color: #4ade80; font-family: 'JetBrains Mono'; font-weight: 700;">R$ {item['valor']:,.2f}</span>
+                        <span style="font-weight: 700; color: #ffffff; font-size: 0.76rem;">{item['banco']} • {item['acao']}</span>
+                        <span style="color: {cor_st}; font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.8rem;">R$ {item['valor']:,.2f}</span>
                     </div>
-                    <div style="font-size: 0.65rem; color: #94a3b8;">📅 {item['data']} • {item['motivo']}</div>
+                    <div style="font-size: 0.63rem; color: #94a3b8;">📅 {item['data']} • {item['motivo']} • <strong style="color:{cor_st};">{badge_st}</strong></div>
                 </div>
                 """, unsafe_allow_html=True)
             with c_btn_est:
-                st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                if st.button("↩️ Estornar", key=f"btn_est_{item['id']}", help="Desfazer e estornar este valor"):
-                    estornar_item_destino(item["id"])
-                    st.success("Destinação estornada com sucesso!")
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+                if st_item == "Previsto":
+                    cb1, cb2 = st.columns(2)
+                    with cb1:
+                        st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
+                        if st.button("✅", key=f"btn_ef_reemb_{item['id']}", help="Confirmar que caiu na conta"):
+                            efetivar_reembolso_item(item["id"])
+                            st.success("Reembolso efetivado!")
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    with cb2:
+                        st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
+                        if st.button("↩️", key=f"btn_est_{item['id']}", help="Cancelar/Excluir"):
+                            estornar_item_destino(item["id"])
+                            st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
+                    if st.button("↩️ Estornar", key=f"btn_est_{item['id']}", help="Desfazer e estornar este valor"):
+                        estornar_item_destino(item["id"])
+                        st.success("Destinação estornada com sucesso!")
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state.bloco_ativo == "advisor":
     st.markdown('<div class="panel-box">', unsafe_allow_html=True)
     c_tit, c_fech = st.columns([5, 1])
     with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">🧠 Advisor • Diagnóstico de Saúde Financeira</span>', unsafe_allow_html=True)
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">🧠 Advisor • Estratégia & Alocação Inteligente</span>', unsafe_allow_html=True)
     with c_fech:
         if st.button("✕", key="fechar_adv"):
             st.session_state.bloco_ativo = None
             st.rerun()
     
     diagnosticos = []
-    
+
+    # --- 1. ANÁLISE DE REEMBOLSOS FUTUROS DESTINADOS À CONTA CORRENTE ---
+    reemb_fut_cc = pd.DataFrame()
+    if not df_reemb_itens.empty:
+        reemb_fut_cc = df_reemb_itens[
+            (df_reemb_itens.get("status", "Efetivado") == "Previsto") &
+            (df_reemb_itens["acao"] == "Creditar em Conta Corrente")
+        ]
+
+    if not reemb_fut_cc.empty:
+        total_reemb_cc = reemb_fut_cc["valor"].sum()
+        bancos_dest_cc = ", ".join(reemb_fut_cc["banco"].unique())
+        
+        # Analisa qual a melhor destinação real para esse dinheiro futuro
+        contas_com_cheque = df_bancos[df_bancos["cheque_especial_usado"] > 0].sort_values(by="cheque_especial_usado", ascending=False)
+        cartoes_ativos = df_bancos[df_bancos["tem_cartao"] == 1].copy()
+        if not cartoes_ativos.empty:
+            cartoes_ativos["lim_real"] = cartoes_ativos.apply(
+                lambda r: r["limite_liberado"] if r["limite_liberado"] > 0 else max(0.0, r["limite_cartao"] - r["fatura_atual"]),
+                axis=1
+            )
+            cartoes_ativos["uso_pct"] = cartoes_ativos.apply(
+                lambda r: (r["fatura_atual"] / r["limite_cartao"] * 100) if r["limite_cartao"] > 0 else 0.0,
+                axis=1
+            )
+
+        if not contas_com_cheque.empty:
+            pior_cheque = contas_com_cheque.iloc[0]
+            val_abater = min(total_reemb_cc, float(pior_cheque["cheque_especial_usado"]))
+            sobra_apos_cheque = max(0.0, total_reemb_cc - val_abater)
+            msg_acao_reemb = (
+                f"Você agendou <strong>R$ {total_reemb_cc:,.2f}</strong> de reembolso futuro para cair em Conta Corrente ({bancos_dest_cc}). "
+                f"<strong>Recomendação do Advisor:</strong> Assim que esse valor entrar, transfira imediatamente <strong>R$ {val_abater:,.2f}</strong> "
+                f"para cobrir o Cheque Especial do <strong>{pior_cheque['banco']}</strong> (que está em R$ {pior_cheque['cheque_especial_usado']:,.2f} e cobra juros diários)."
+            )
+            if sobra_apos_cheque > 0:
+                msg_acao_reemb += f" Os <strong>R$ {sobra_apos_cheque:,.2f}</strong> restantes você pode deixar rendendo em conta como capital de giro para combustível."
+            diagnosticos.append({
+                "titulo": "💡 O que fazer com o Reembolso Futuro em Conta:",
+                "tipo": "warning",
+                "desc": msg_acao_reemb
+            })
+        elif not cartoes_ativos.empty and cartoes_ativos["uso_pct"].max() >= 70.0:
+            cartao_apertado = cartoes_ativos.sort_values(by="uso_pct", ascending=False).iloc[0]
+            val_adiantar = min(total_reemb_cc, float(cartao_apertado["fatura_atual"]))
+            diagnosticos.append({
+                "titulo": "💡 O que fazer com o Reembolso Futuro em Conta:",
+                "tipo": "info",
+                "desc": (
+                    f"Você tem <strong>R$ {total_reemb_cc:,.2f}</strong> de reembolso previsto para Conta Corrente ({bancos_dest_cc}). "
+                    f"Como seu Cheque Especial está zerado, mas o cartão <strong>{cartao_apertado['banco']}</strong> está com "
+                    f"<strong>{cartao_apertado['uso_pct']:.0f}% do limite comprometido</strong> (Fatura: R$ {cartao_apertado['fatura_atual']:,.2f}), "
+                    f"vale a pena adiantar <strong>R$ {val_adiantar:,.2f}</strong> nessa fatura para liberar limite para os próximos pedágios."
+                )
+            })
+        else:
+            diagnosticos.append({
+                "titulo": "💡 O que fazer com o Reembolso Futuro em Conta:",
+                "tipo": "success",
+                "desc": (
+                    f"Você tem <strong>R$ {total_reemb_cc:,.2f}</strong> previstos para cair em Conta Corrente ({bancos_dest_cc}). "
+                    f"Como seu Cheque Especial está zerado e suas faturas estão sob controle, <strong>mantenha esse valor na conta</strong> "
+                    f"(preferencialmente em conta remunerada 100% CDI como Nubank/Mercado Pago) para pagar a gasolina das próximas viagens à vista no Pix/Débito sem depender de crédito!"
+                )
+            })
+
+    # --- 2. ESTRATÉGIA PARA PAGAR GASOLINA E PEDÁGIO DAS PRÓXIMAS ALOCAÇÕES ---
+    dia_hoje = date.today().day
+    cartoes_disp = df_bancos[df_bancos["tem_cartao"] == 1].copy()
+    melhor_cartao_msg = ""
+
+    if not cartoes_disp.empty:
+        # Calcula limite real livre e distância até o melhor dia de compra (fechamento)
+        def score_cartao(row):
+            lim_t = float(row["limite_cartao"])
+            fat = float(row["fatura_atual"])
+            lim_lib = float(row["limite_liberado"]) if float(row["limite_liberado"]) > 0 else max(0.0, lim_t - fat)
+            dia_f = int(row.get("dia_fechamento", 3))
+            dia_v = int(row.get("dia_vencimento", 10))
+            # Dias até o próximo fechamento
+            if dia_hoje >= dia_f:
+                # Acabou de fechar: melhor momento! Fatura só vence no mês seguinte
+                dias_prazo = (30 - dia_hoje) + dia_v
+                status_ciclo = "Fatura recém-fechada (máximo prazo)"
+            else:
+                dias_prazo = dia_v - dia_hoje if dia_v > dia_hoje else (30 - dia_hoje) + dia_v
+                status_ciclo = f"Fecha dia {dia_f}"
+            return pd.Series([lim_lib, dias_prazo, status_ciclo])
+
+        cartoes_disp[["lim_real", "dias_prazo", "status_ciclo"]] = cartoes_disp.apply(score_cartao, axis=1)
+        cartoes_com_limite = cartoes_disp[cartoes_disp["lim_real"] >= 100.0].sort_values(by=["dias_prazo", "lim_real"], ascending=[False, False])
+
+        if not cartoes_com_limite.empty:
+            top_c = cartoes_com_limite.iloc[0]
+            melhor_cartao_msg = (
+                f"<strong>Use o Cartão {top_c['banco']}</strong> para Pedágio e Gasolina: ele tem "
+                f"<strong>R$ {top_c['lim_real']:,.2f}</strong> de limite liberado real, {top_c['status_ciclo']} "
+                f"e vence dia {int(top_c['dia_vencimento'])} (~{int(top_c['dias_prazo'])} dias de prazo). "
+                f"Isso dá tempo de sobra para o reembolso da empresa cair antes da fatura vencer!"
+            )
+
+    if total_saldos >= 200.0 and melhor_cartao_msg:
+        desc_estrategia = (
+            f"<strong>1º Opção (Recomendada):</strong> {melhor_cartao_msg}<br>"
+            f"<strong>2º Opção (À vista):</strong> Você também possui R$ {total_saldos:,.2f} em conta se preferir pagar no débito/Pix.<br>"
+            f"<strong>🚫 Evite Cheque Especial:</strong> Nunca use o cheque especial enquanto tiver saldo em conta ou limite no cartão."
+        )
+        tipo_est = "success"
+    elif melhor_cartao_msg:
+        desc_estrategia = (
+            f"<strong>NÃO use o Cheque Especial!</strong> Seu saldo em conta está baixo (R$ {total_saldos:,.2f}), mas você tem limite no crédito. "
+            f"{melhor_cartao_msg}"
+        )
+        tipo_est = "info"
+    else:
+        desc_estrategia = (
+            f"<strong>Atenção:</strong> Seus cartões estão sem limite livre suficiente (ou desativados) e seu saldo atual é R$ {total_saldos:,.2f}. "
+            f"Nesse cenário específico, utilize o <strong>Cheque Especial de menor taxa</strong> apenas pelo valor exato da gasolina/pedágio da viagem e "
+            f"registre imediatamente na aba <strong>⛽ Destinar Reembolso</strong> para cobrir assim que a empresa pagar."
+        )
+        tipo_est = "warning"
+
+    diagnosticos.append({
+        "titulo": "⛽ Melhor Forma de Pagar Gasolina & Pedágio Agora:",
+        "tipo": tipo_est,
+        "desc": desc_estrategia
+    })
+
+    # --- 3. SAÚDE GERAL DE CHEQUE ESPECIAL E FATURAS ---
     if total_cheque > 0:
         diagnosticos.append({
             "titulo": "⚠️ Alerta Crítico: Cheque Especial Ativo",
             "tipo": "danger",
-            "desc": f"Você está utilizando R$ {total_cheque:,.2f} do limite emergencial. Use o botão ⛽ Destinar para abater o cheque especial assim que receber reembolsos de gasolina da empresa."
-        })
-    else:
-        diagnosticos.append({
-            "titulo": "✅ Cheque Especial Zerado",
-            "tipo": "success",
-            "desc": "Parabéns! Nenhuma das suas contas bancárias está pagando juros de cheque especial."
+            "desc": f"Você está utilizando R$ {total_cheque:,.2f} do limite emergencial. Priorize abater esse valor antes de qualquer gasto extra."
         })
         
     if total_saldos < total_faturas:
         deficit = total_faturas - total_saldos
         diagnosticos.append({
-            "titulo": "🚨 Faturas Maiores que o Saldo Disponível",
+            "titulo": "🚨 Faturas Maiores que o Saldo Atual em Conta",
             "tipo": "danger",
-            "desc": f"Suas faturas somam R$ {total_faturas:,.2f}, enquanto seu saldo total é de R$ {total_saldos:,.2f} (diferença de R$ {deficit:,.2f}). Use a destinação direta de reembolsos para abater o cartão antes do fechamento."
+            "desc": f"Suas faturas somam R$ {total_faturas:,.2f}, enquanto seu saldo real é R$ {total_saldos:,.2f} (diferença de R$ {deficit:,.2f}). Use seus recebimentos dos dias 03/16 e reembolsos previstos para cobrir."
         })
     else:
         folga = total_saldos - total_faturas
         diagnosticos.append({
-            "titulo": "🛡️ Faturas Cobertas com Folga",
+            "titulo": "🛡️ Faturas Cobertas pelo Saldo Real",
             "tipo": "success",
-            "desc": f"Seu saldo disponível quita 100% das suas faturas atuais e ainda sobram R$ {folga:,.2f} livres."
+            "desc": f"Seu saldo atual em conta quita 100% das suas faturas abertas e ainda sobram R$ {folga:,.2f} livres."
         })
         
     for diag in diagnosticos:
@@ -1760,7 +1982,7 @@ elif st.session_state.bloco_ativo == "advisor":
         st.markdown(f"""
         <div style="background: #0d1522; border: 1px solid #1d2d42; border-left: 4px solid {cor_borda}; border-radius: 12px; padding: 12px; margin-bottom: 10px;">
             <div style="font-size: 0.82rem; font-weight: 700; color: #ffffff;">{diag['titulo']}</div>
-            <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;">{diag['desc']}</div>
+            <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px; line-height: 1.45;">{diag['desc']}</div>
         </div>
         """, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
