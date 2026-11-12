@@ -391,29 +391,31 @@ st.markdown("""
     .badge-out { color: #f87171; }
     .badge-reemb-livre { color: #fbbf24; }
 
-    /* Grade do Calendário de Alocações 100% Responsiva no Celular (7 colunas fixas) */
-    .aloc-cal-grid [data-testid="stHorizontalBlock"] {
+    /* Grade do Calendário de Alocações 100% Responsiva no Celular (7 colunas fixas via :has) */
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(7)),
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(7)) {
         display: grid !important;
-        grid-template-columns: repeat(7, 1fr) !important;
+        grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
         gap: 3px !important;
         width: 100% !important;
         margin-bottom: 3px !important;
     }
-    .aloc-cal-grid [data-testid="column"],
-    .aloc-cal-grid [data-testid="stColumn"] {
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(7)) > [data-testid="stColumn"],
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(7)) > [data-testid="column"] {
         width: 100% !important;
         min-width: 0 !important;
         max-width: 100% !important;
         flex: 1 1 0% !important;
         padding: 0 !important;
     }
-    .aloc-cal-grid button {
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(7)) button,
+    [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(7)) button {
         width: 100% !important;
         min-width: 0 !important;
         padding: 4px 1px !important;
         min-height: 34px !important;
         height: 34px !important;
-        font-size: 0.66rem !important;
+        font-size: 0.65rem !important;
         font-weight: 700 !important;
         border-radius: 8px !important;
         line-height: 1 !important;
@@ -1250,6 +1252,8 @@ if "mostrar_form_parc" not in st.session_state:
 
 if "mostrar_calc_km" not in st.session_state:
     st.session_state.mostrar_calc_km = False
+if "mostrar_form_rateio" not in st.session_state:
+    st.session_state.mostrar_form_rateio = False
 if "recolher_lanc_ciclo" not in st.session_state:
     st.session_state.recolher_lanc_ciclo = False
 if "recolher_dest_reemb" not in st.session_state:
@@ -1937,7 +1941,6 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
         datas_marcadas_set = set(df_aloc["data_alocacao"].tolist()) if not df_aloc.empty else set()
 
         # Grade mensal clicável (Seg a Dom) — 7 colunas fixas tanto no PC quanto no Celular
-        st.markdown('<div class="aloc-cal-grid">', unsafe_allow_html=True)
         cal_matrix = calendar.monthcalendar(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)
         dias_hdr = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
         hdr_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;">'
@@ -1964,7 +1967,6 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
                     ):
                         toggle_alocacao_dia(dt_cell_str, "Alocação Cliente", val_diaria_aloc, val_gas_aloc, val_ped_aloc)
                         st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
         # Botões rápidos: Marcar Seg-Sex do mês / Limpar mês
         dt_m_ini = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, 1)
@@ -2054,162 +2056,170 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
             st.markdown(f"**Reembolso Total:** <span style='color: #4ade80; font-weight: 800;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Escolha de quantos destinos o usuário quer configurar
-    if "qtd_destinos" not in st.session_state:
-        st.session_state.qtd_destinos = 2
+    # Botão de toggle para recolher/expandir o formulário de Destinação de Reembolso
+    btn_rateio_lbl = "➖ Ocultar Destinação de Reembolso" if st.session_state.mostrar_form_rateio else "🎯 Lançar / Destinar Reembolso (Rateio)"
+    if st.button(btn_rateio_lbl, key="toggle_form_rateio"):
+        st.session_state.mostrar_form_rateio = not st.session_state.mostrar_form_rateio
+        st.rerun()
 
-    def recalcular_diferenca_destinos():
-        qtd = st.session_state.get("qtd_destinos", 2)
-        total = float(st.session_state.get("reemb_total_val", 0.0))
-        letras_cb = ["A", "B", "C", "D", "E"]
-        if qtd == 1:
-            st.session_state["v_A"] = round(total, 2)
-        else:
-            soma_anteriores = 0.0
-            for i in range(qtd - 1):
-                soma_anteriores += float(st.session_state.get(f"v_{letras_cb[i]}", 0.0))
-            ultima_letra = letras_cb[qtd - 1]
-            st.session_state[f"v_{ultima_letra}"] = round(max(0.0, total - soma_anteriores), 2)
+    if st.session_state.mostrar_form_rateio:
+        # Escolha de quantos destinos o usuário quer configurar
+        if "qtd_destinos" not in st.session_state:
+            st.session_state.qtd_destinos = 2
 
-    c_sel_q1, c_sel_q2 = st.columns([2.5, 1.5])
-    with c_sel_q1:
-        st.markdown('<div style="font-size: 0.78rem; font-weight: 700; color: #ffffff; padding-top: 8px;">Quantos destinos quer ratear?</div>', unsafe_allow_html=True)
-    with c_sel_q2:
-        qtd_escolhida = st.selectbox(
-            "Qtd", 
-            [1, 2, 3, 4, 5], 
-            index=[1, 2, 3, 4, 5].index(st.session_state.qtd_destinos),
-            label_visibility="collapsed",
-            key="sel_qtd_destinos_widget"
-        )
-        if qtd_escolhida != st.session_state.qtd_destinos:
-            st.session_state.qtd_destinos = qtd_escolhida
-            recalcular_diferenca_destinos()
-            st.rerun()
+        def recalcular_diferenca_destinos():
+            qtd = st.session_state.get("qtd_destinos", 2)
+            total = float(st.session_state.get("reemb_total_val", 0.0))
+            letras_cb = ["A", "B", "C", "D", "E"]
+            if qtd == 1:
+                st.session_state["v_A"] = round(total, 2)
+            else:
+                soma_anteriores = 0.0
+                for i in range(qtd - 1):
+                    soma_anteriores += float(st.session_state.get(f"v_{letras_cb[i]}", 0.0))
+                ultima_letra = letras_cb[qtd - 1]
+                st.session_state[f"v_{ultima_letra}"] = round(max(0.0, total - soma_anteriores), 2)
 
-    # Inicializa valores na sessão se ainda não existirem
-    if "reemb_total_val" not in st.session_state:
-        st.session_state["reemb_total_val"] = 617.00
-    if "v_A" not in st.session_state:
-        st.session_state["v_A"] = 150.00
-    if "v_B" not in st.session_state:
-        st.session_state["v_B"] = round(max(0.0, st.session_state["reemb_total_val"] - st.session_state["v_A"]), 2)
-    for l_init in ["C", "D", "E"]:
-        if f"v_{l_init}" not in st.session_state:
-            st.session_state[f"v_{l_init}"] = 0.0
+        c_sel_q1, c_sel_q2 = st.columns([2.5, 1.5])
+        with c_sel_q1:
+            st.markdown('<div style="font-size: 0.78rem; font-weight: 700; color: #ffffff; padding-top: 8px;">Quantos destinos quer ratear?</div>', unsafe_allow_html=True)
+        with c_sel_q2:
+            qtd_escolhida = st.selectbox(
+                "Qtd", 
+                [1, 2, 3, 4, 5], 
+                index=[1, 2, 3, 4, 5].index(st.session_state.qtd_destinos),
+                label_visibility="collapsed",
+                key="sel_qtd_destinos_widget"
+            )
+            if qtd_escolhida != st.session_state.qtd_destinos:
+                st.session_state.qtd_destinos = qtd_escolhida
+                recalcular_diferenca_destinos()
+                st.rerun()
 
-    st.markdown('<div style="background: #0d1522; border: 1px solid #1e2d44; border-radius: 14px; padding: 12px; margin-top: 8px; margin-bottom: 12px;">', unsafe_allow_html=True)
-    st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #ffffff; margin-bottom: 8px;">1. Entrada Total de Reembolso Recebido:</div>', unsafe_allow_html=True)
-    c_v1, c_v2 = st.columns(2)
-    with c_v1:
-        data_receb = st.date_input("Data do Recebimento / Agendamento", value=date.today(), key="reemb_data_input")
-    with c_v2:
-        valor_total_recebido = st.number_input(
-            "Valor Total (R$)", 
-            min_value=0.01, 
-            step=10.0, 
-            key="reemb_total_val",
-            on_change=recalcular_diferenca_destinos
-        )
+        # Inicializa valores na sessão se ainda não existirem
+        if "reemb_total_val" not in st.session_state:
+            st.session_state["reemb_total_val"] = 617.00
+        if "v_A" not in st.session_state:
+            st.session_state["v_A"] = 150.00
+        if "v_B" not in st.session_state:
+            st.session_state["v_B"] = round(max(0.0, st.session_state["reemb_total_val"] - st.session_state["v_A"]), 2)
+        for l_init in ["C", "D", "E"]:
+            if f"v_{l_init}" not in st.session_state:
+                st.session_state[f"v_{l_init}"] = 0.0
 
-    is_reemb_efetivado = (data_receb <= date.today())
-    if is_reemb_efetivado:
-        st.markdown(f"""
-        <div style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 10px; padding: 7px 10px; margin: 6px 0 8px 0; font-size: 0.68rem; color: #4ade80;">
-            ✅ <strong>Data de hoje/passada ({data_receb.strftime('%d/%m/%Y')}):</strong> Os saldos, faturas ou cheque especial serão atualizados imediatamente.
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 10px; padding: 7px 10px; margin: 6px 0 8px 0; font-size: 0.68rem; color: #eab308;">
-            ⏳ <strong>Data Futura ({data_receb.strftime('%d/%m/%Y')}):</strong> Não mexe no seu saldo/fatura hoje. Será abatido/creditado automaticamente no dia <strong>{data_receb.strftime('%d/%m/%Y')}</strong>!
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown(f'<div style="font-size: 0.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">2. Configurar os {st.session_state.qtd_destinos} Destino(s):</div>', unsafe_allow_html=True)
-    st.caption("Ao digitar o valor em um destino, a diferença restante é calculada automaticamente no próximo:")
-
-    destinos_coletados = []
-    bancos_list = df_bancos["banco"].tolist()
-    cores_letras = ["#38bdf8", "#fbbf24", "#4ade80", "#a855f7", "#f43f5e"]
-    letras = ["A", "B", "C", "D", "E"]
-    sugestoes_motivos = [
-        "Pedágio no Cartão de Crédito",
-        "Gasolina no Cheque Especial",
-        "Renda livre / Lucro das diárias",
-        "Outro gasto / Ajuste",
-        "Reserva / Poupança"
-    ]
-
-    for idx_d in range(st.session_state.qtd_destinos):
-        letra = letras[idx_d]
-        cor = cores_letras[idx_d % len(cores_letras)]
-        sugestao_banco = idx_d if idx_d < len(bancos_list) else 0
-        is_ultimo = (idx_d == st.session_state.qtd_destinos - 1)
-        tag_auto = " • ⚡ Diferença Automática" if (is_ultimo and st.session_state.qtd_destinos > 1) else ""
-        
-        st.markdown(f"""
-        <div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">
-            <span style="font-size: 0.72rem; font-weight: 700; color: {cor};">🎯 Destino {letra}{tag_auto}</span>
-        """, unsafe_allow_html=True)
-        
-        c_d1, c_d2 = st.columns(2)
-        with c_d1:
-            banco_d = st.selectbox(f"Banco ({letra})", bancos_list, index=sugestao_banco, key=f"b_{letra}")
-        with c_d2:
-            val_d = st.number_input(
-                f"Valor R$ ({letra})", 
-                min_value=0.0, 
+        st.markdown('<div style="background: #0d1522; border: 1px solid #1e2d44; border-radius: 14px; padding: 12px; margin-top: 8px; margin-bottom: 12px;">', unsafe_allow_html=True)
+        st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #ffffff; margin-bottom: 8px;">1. Entrada Total de Reembolso Recebido:</div>', unsafe_allow_html=True)
+        c_v1, c_v2 = st.columns(2)
+        with c_v1:
+            data_receb = st.date_input("Data do Recebimento / Agendamento", value=date.today(), key="reemb_data_input")
+        with c_v2:
+            valor_total_recebido = st.number_input(
+                "Valor Total (R$)", 
+                min_value=0.01, 
                 step=10.0, 
-                key=f"v_{letra}",
-                on_change=(recalcular_diferenca_destinos if not is_ultimo else None)
+                key="reemb_total_val",
+                on_change=recalcular_diferenca_destinos
             )
 
-        acao_d = st.selectbox(
-            f"Ação ({letra})", 
-            ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], 
-            index=0 if idx_d == 0 else (1 if idx_d == 1 else 2), 
-            key=f"ac_{letra}"
-        )
-        motivo_d = st.text_input(
-            f"Identificação / Motivo ({letra})", 
-            value=sugestoes_motivos[idx_d % len(sugestoes_motivos)], 
-            key=f"m_{letra}"
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        destinos_coletados.append({
-            "banco": banco_d,
-            "acao": acao_d,
-            "valor": val_d,
-            "motivo": motivo_d
-        })
-
-    # Conferência em tempo real da soma dos destinos vs total recebido
-    soma_atual = sum(d["valor"] for d in destinos_coletados)
-    diferenca_atual = valor_total_recebido - soma_atual
-    cor_conf = "#4ade80" if abs(diferenca_atual) < 0.01 else "#fbbf24"
-    status_conf = "✅ 100% Rateado" if abs(diferenca_atual) < 0.01 else (f"⚠️ Falta destinar: R$ {diferenca_atual:,.2f}" if diferenca_atual > 0 else f"⚠️ Excedeu em: R$ {abs(diferenca_atual):,.2f}")
-
-    st.markdown(f"""
-    <div style="background: #111a28; border: 1px solid #223249; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem;">
-        <span style="color: #94a3b8;">Distribuído: <strong style="color: #ffffff;">R$ {soma_atual:,.2f}</strong> / R$ {valor_total_recebido:,.2f}</span>
-        <span style="color: {cor_conf}; font-weight: 800;">{status_conf}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if st.button("🚀 Executar Entrada & Destinar Automaticamente", key="btn_executar_rateio_dinamico", type="primary"):
-        destinos_ativos = [d for d in destinos_coletados if d["valor"] > 0]
-        if not destinos_ativos:
-            st.error("Informe um valor maior que zero em pelo menos um destino!")
+        is_reemb_efetivado = (data_receb <= date.today())
+        if is_reemb_efetivado:
+            st.markdown(f"""
+            <div style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 10px; padding: 7px 10px; margin: 6px 0 8px 0; font-size: 0.68rem; color: #4ade80;">
+                ✅ <strong>Data de hoje/passada ({data_receb.strftime('%d/%m/%Y')}):</strong> Os saldos, faturas ou cheque especial serão atualizados imediatamente.
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), valor_total_recebido, destinos_ativos, efetivar_agora=is_reemb_efetivado)
-            if is_reemb_efetivado:
-                st.success(f"Reembolso de R$ {valor_total_recebido:,.2f} efetivado nos saldos e faturas!")
+            st.markdown(f"""
+            <div style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 10px; padding: 7px 10px; margin: 6px 0 8px 0; font-size: 0.68rem; color: #eab308;">
+                ⏳ <strong>Data Futura ({data_receb.strftime('%d/%m/%Y')}):</strong> Não mexe no seu saldo/fatura hoje. Será abatido/creditado automaticamente no dia <strong>{data_receb.strftime('%d/%m/%Y')}</strong>!
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown(f'<div style="font-size: 0.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">2. Configurar os {st.session_state.qtd_destinos} Destino(s):</div>', unsafe_allow_html=True)
+        st.caption("Ao digitar o valor em um destino, a diferença restante é calculada automaticamente no próximo:")
+
+        destinos_coletados = []
+        bancos_list = df_bancos["banco"].tolist()
+        cores_letras = ["#38bdf8", "#fbbf24", "#4ade80", "#a855f7", "#f43f5e"]
+        letras = ["A", "B", "C", "D", "E"]
+        sugestoes_motivos = [
+            "Pedágio no Cartão de Crédito",
+            "Gasolina no Cheque Especial",
+            "Renda livre / Lucro das diárias",
+            "Outro gasto / Ajuste",
+            "Reserva / Poupança"
+        ]
+
+        for idx_d in range(st.session_state.qtd_destinos):
+            letra = letras[idx_d]
+            cor = cores_letras[idx_d % len(cores_letras)]
+            sugestao_banco = idx_d if idx_d < len(bancos_list) else 0
+            is_ultimo = (idx_d == st.session_state.qtd_destinos - 1)
+            tag_auto = " • ⚡ Diferença Automática" if (is_ultimo and st.session_state.qtd_destinos > 1) else ""
+        
+            st.markdown(f"""
+            <div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">
+                <span style="font-size: 0.72rem; font-weight: 700; color: {cor};">🎯 Destino {letra}{tag_auto}</span>
+            """, unsafe_allow_html=True)
+        
+            c_d1, c_d2 = st.columns(2)
+            with c_d1:
+                banco_d = st.selectbox(f"Banco ({letra})", bancos_list, index=sugestao_banco, key=f"b_{letra}")
+            with c_d2:
+                val_d = st.number_input(
+                    f"Valor R$ ({letra})", 
+                    min_value=0.0, 
+                    step=10.0, 
+                    key=f"v_{letra}",
+                    on_change=(recalcular_diferenca_destinos if not is_ultimo else None)
+                )
+
+            acao_d = st.selectbox(
+                f"Ação ({letra})", 
+                ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], 
+                index=0 if idx_d == 0 else (1 if idx_d == 1 else 2), 
+                key=f"ac_{letra}"
+            )
+            motivo_d = st.text_input(
+                f"Identificação / Motivo ({letra})", 
+                value=sugestoes_motivos[idx_d % len(sugestoes_motivos)], 
+                key=f"m_{letra}"
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+            destinos_coletados.append({
+                "banco": banco_d,
+                "acao": acao_d,
+                "valor": val_d,
+                "motivo": motivo_d
+            })
+
+        # Conferência em tempo real da soma dos destinos vs total recebido
+        soma_atual = sum(d["valor"] for d in destinos_coletados)
+        diferenca_atual = valor_total_recebido - soma_atual
+        cor_conf = "#4ade80" if abs(diferenca_atual) < 0.01 else "#fbbf24"
+        status_conf = "✅ 100% Rateado" if abs(diferenca_atual) < 0.01 else (f"⚠️ Falta destinar: R$ {diferenca_atual:,.2f}" if diferenca_atual > 0 else f"⚠️ Excedeu em: R$ {abs(diferenca_atual):,.2f}")
+
+        st.markdown(f"""
+        <div style="background: #111a28; border: 1px solid #223249; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem;">
+            <span style="color: #94a3b8;">Distribuído: <strong style="color: #ffffff;">R$ {soma_atual:,.2f}</strong> / R$ {valor_total_recebido:,.2f}</span>
+            <span style="color: {cor_conf}; font-weight: 800;">{status_conf}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("🚀 Executar Entrada & Destinar Automaticamente", key="btn_executar_rateio_dinamico", type="primary"):
+            destinos_ativos = [d for d in destinos_coletados if d["valor"] > 0]
+            if not destinos_ativos:
+                st.error("Informe um valor maior que zero em pelo menos um destino!")
             else:
-                st.success(f"Reembolso futuro de R$ {valor_total_recebido:,.2f} agendado para {data_receb.strftime('%d/%m/%Y')}! Ele só alterará seus saldos/faturas nessa data.")
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+                aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), valor_total_recebido, destinos_ativos, efetivar_agora=is_reemb_efetivado)
+                if is_reemb_efetivado:
+                    st.success(f"Reembolso de R$ {valor_total_recebido:,.2f} efetivado nos saldos e faturas!")
+                else:
+                    st.success(f"Reembolso futuro de R$ {valor_total_recebido:,.2f} agendado para {data_receb.strftime('%d/%m/%Y')}! Ele só alterará seus saldos/faturas nessa data.")
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
 
     # Histórico de Destinações com Edição, Baixa, Estorno e Botão Recolher
     df_itens_hist = get_reembolsos_itens()
