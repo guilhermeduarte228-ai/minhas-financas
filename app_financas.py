@@ -1,9 +1,11 @@
+import os
 import re
 import streamlit as st
 import pandas as pd
 import sqlite3
 import calendar
-from datetime import datetime, date
+import hashlib
+from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
 
 import io
@@ -350,6 +352,10 @@ st.markdown("""
         font-weight: 600;
         position: relative;
     }
+    .cal-cell.payday {
+        border-color: #eab308 !important;
+        box-shadow: inset 0 0 6px rgba(234, 179, 8, 0.35);
+    }
     .cal-cell.today {
         border-color: #38bdf8 !important;
         box-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
@@ -472,6 +478,10 @@ def init_db():
         c.execute("ALTER TABLE contas_bancarias ADD COLUMN tem_cartao INTEGER DEFAULT 1")
     if "limite_liberado" not in cols:
         c.execute("ALTER TABLE contas_bancarias ADD COLUMN limite_liberado REAL DEFAULT 0")
+    c.execute("PRAGMA table_info(transacoes)")
+    t_cols = [col[1] for col in c.fetchall()]
+    if "fitid" not in t_cols:
+        c.execute("ALTER TABLE transacoes ADD COLUMN fitid TEXT DEFAULT ''")
 
     c.execute("UPDATE contas_bancarias SET banco = 'Itaú', cor_identificador = '#ec7000' WHERE banco = 'Inter'")
     c.execute("UPDATE transacoes SET banco = 'Itaú' WHERE banco = 'Inter'")
@@ -559,6 +569,39 @@ def atualizar_previsto(id_prev, data_str, desc, valor, cat, tipo, banco, fixo):
     """, (data_str, desc, valor, cat, tipo, banco, fixo, id_prev))
     conn.commit()
     conn.close()
+
+def efetivar_previsto(id_prev):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("SELECT data_prevista, descricao, valor, categoria, tipo, banco FROM lancamentos_previstos WHERE id = ?", (id_prev,))
+    row = c.fetchone()
+    if row:
+        data_p, desc, valor, cat, tipo, banco = row
+        dt_fmt = datetime.now().strftime("%d/%m %H:%M")
+        c.execute("""
+            INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo)
+            VALUES (?, ?, ?, ?, ?, 'Conta Corrente / Pix', ?)
+        """, (dt_fmt, f"{desc} (Efetivado)", valor, cat, banco, tipo))
+        if tipo == "Entrada":
+            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta + ? WHERE banco = ?", (valor, banco))
+        else:
+            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (valor, banco))
+        c.execute("DELETE FROM lancamentos_previstos WHERE id = ?", (id_prev,))
+    conn.commit()
+    conn.close()
+
+def get_intervalo_ciclo(ano, mes, modo="Ciclo Completo (03 a 03)"):
+    dt_03 = date(ano, mes, 3)
+    dt_15 = date(ano, mes, 15)
+    dt_16 = date(ano, mes, 16)
+    dt_prox_03 = dt_03 + relativedelta(months=1)
+    dt_fim_ciclo = dt_prox_03 - timedelta(days=1)  # 03/MM até 02/MM+1 (fechamento na virada do dia 03)
+    if "1ª Quinzena" in modo:
+        return dt_03, dt_15, dt_prox_03
+    elif "2ª Quinzena" in modo:
+        return dt_16, dt_fim_ciclo, dt_prox_03
+    else:
+        return dt_03, dt_fim_ciclo, dt_prox_03
 
 def remover_previsto(id_prev):
     conn = sqlite3.connect("financas.db")
@@ -858,6 +901,7 @@ def parse_ofx_content(text):
         memo_match = re.search(r"<MEMO>([^\r\n<]+)", block, re.IGNORECASE)
         name_match = re.search(r"<NAME>([^\r\n<]+)", block, re.IGNORECASE)
         type_match = re.search(r"<TRNTYPE>([^\r\n<]+)", block, re.IGNORECASE)
+        fitid_match = re.search(r"<FITID>([^\r\n<]+)", block, re.IGNORECASE)
         
         if amt_match:
             try:
@@ -881,11 +925,15 @@ def parse_ofx_content(text):
                 
             tipo_trn = type_match.group(1).strip().upper() if type_match else ""
             
+            raw_fitid = fitid_match.group(1).strip() if fitid_match else ""
+            if not raw_fitid:
+                raw_fitid = hashlib.md5(f"{formatted_date}_{amt}_{desc}".encode("utf-8")).hexdigest()[:16]
             transactions.append({
                 "data": formatted_date,
                 "descricao": desc,
                 "valor": amt,
-                "tipo_ofx": tipo_trn
+                "tipo_ofx": tipo_trn,
+                "fitid": raw_fitid
             })
             
     return transactions, ledger_bal
@@ -936,10 +984,13 @@ if "copiando_prev" not in st.session_state:
     st.session_state.copiando_prev = None
 
 hoje = date.today()
+dt_ciclo_default = hoje if hoje.day >= 3 else (hoje - relativedelta(months=1))
 if "cal_mes" not in st.session_state:
-    st.session_state.cal_mes = hoje.month
+    st.session_state.cal_mes = dt_ciclo_default.month
 if "cal_ano" not in st.session_state:
-    st.session_state.cal_ano = hoje.year
+    st.session_state.cal_ano = dt_ciclo_default.year
+if "modo_ciclo" not in st.session_state:
+    st.session_state.modo_ciclo = "Ciclo Completo (03 a 03)"
 
 # Barra Superior
 st.markdown("""
@@ -997,7 +1048,7 @@ if st.session_state.bloco_ativo == "previstos":
     
     c_tit, c_limp, c_fech = st.columns([3, 2, 1])
     with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📅 Lançamentos Previstos</span>', unsafe_allow_html=True)
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📅 Ciclo & Previsões</span>', unsafe_allow_html=True)
     with c_limp:
         st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
         if st.button("🗑️ Limpar Todos", key="btn_limpar_prev", help="Apaga todas as previsões agendadas"):
@@ -1011,18 +1062,60 @@ if st.session_state.bloco_ativo == "previstos":
             st.session_state.bloco_ativo = None
             st.rerun()
 
-    # Totais Previstos (contando previsões regulares + entradas ativas de reembolso)
-    entradas_prev_base = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() if not df_prev.empty else 0.0
-    entradas_reemb_total = df_reemb_itens["valor"].sum() if not df_reemb_itens.empty else 0.0
+    # Seletor de Período do Ciclo (Dia 03 a Dia 03 + Quinzenas 03 e 16)
+    modo_sel = st.selectbox(
+        "Período de Apuração:",
+        ["Ciclo Completo (03 a 03)", "1ª Quinzena (Dia 03 a 15)", "2ª Quinzena (Dia 16 a 02)"],
+        index=["Ciclo Completo (03 a 03)", "1ª Quinzena (Dia 03 a 15)", "2ª Quinzena (Dia 16 a 02)"].index(st.session_state.modo_ciclo),
+        key="sel_modo_ciclo_prev"
+    )
+    if modo_sel != st.session_state.modo_ciclo:
+        st.session_state.modo_ciclo = modo_sel
+        st.rerun()
+
+    dt_ciclo_ini, dt_ciclo_fim, dt_prox_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, st.session_state.modo_ciclo)
+
+    st.markdown(f"""
+    <div style="background: #101929; border: 1px solid #243652; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; font-size: 0.7rem; color: #cbd5e1;">
+        📆 <strong>Fechamento Ativo:</strong> {dt_ciclo_ini.strftime('%d/%m/%Y')} até {dt_ciclo_fim.strftime('%d/%m/%Y')}
+        <div style="font-size: 0.62rem; color: #eab308; margin-top: 2px;">💰 Renda fixa nos dias 03 e 16 • Próxima virada em {dt_prox_03.strftime('%d/%m/%Y')}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Filtrar previsões e reembolsos estritamente dentro do ciclo (03 a 03)
+    df_prev_ciclo = pd.DataFrame()
+    if not df_prev.empty:
+        mask_p = []
+        for _, r in df_prev.iterrows():
+            try:
+                d_obj = datetime.strptime(r["data_prevista"], "%Y-%m-%d").date()
+                mask_p.append(dt_ciclo_ini <= d_obj <= dt_ciclo_fim)
+            except:
+                mask_p.append(False)
+        df_prev_ciclo = df_prev[mask_p]
+
+    df_reemb_ciclo = pd.DataFrame()
+    if not df_reemb_itens.empty:
+        mask_r = []
+        for _, r in df_reemb_itens.iterrows():
+            try:
+                d_obj = datetime.strptime(r["data"], "%Y-%m-%d").date()
+                mask_r.append(dt_ciclo_ini <= d_obj <= dt_ciclo_fim)
+            except:
+                mask_r.append(False)
+        df_reemb_ciclo = df_reemb_itens[mask_r]
+
+    entradas_prev_base = df_prev_ciclo[df_prev_ciclo["tipo"] == "Entrada"]["valor"].sum() if not df_prev_ciclo.empty else 0.0
+    entradas_reemb_total = df_reemb_ciclo["valor"].sum() if not df_reemb_ciclo.empty else 0.0
     entradas_previstas = entradas_prev_base + entradas_reemb_total
     
-    saidas_previstas = df_prev[df_prev["tipo"] == "Saída"]["valor"].sum() if not df_prev.empty else 0.0
+    saidas_previstas = df_prev_ciclo[df_prev_ciclo["tipo"] == "Saída"]["valor"].sum() if not df_prev_ciclo.empty else 0.0
     saldo_projetado = total_saldos + entradas_previstas - saidas_previstas
 
-    # PAINEL DE SALDO PREVISTO A RECEBER E COMPARATIVO
+    # PAINEL DE SALDO PREVISTO A RECEBER E COMPARATIVO DO CICLO
     st.markdown(f"""
-    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 10px 0 14px 0;">
-        <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Fluxo Futuro & Comparativo</div>
+    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 6px 0 14px 0;">
+        <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Balanço do Período ({dt_ciclo_ini.strftime('%d/%m')} a {dt_ciclo_fim.strftime('%d/%m')})</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
             <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
                 <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">PREVISTO A RECEBER</span>
@@ -1048,7 +1141,7 @@ if st.session_state.bloco_ativo == "previstos":
     </div>
     """, unsafe_allow_html=True)
 
-    # CALENDÁRIO VISUAL COM CORES NOS DIAS PREVISTOS
+    # CALENDÁRIO VISUAL COM CORES NOS DIAS PREVISTOS E DESTAQUE NOS DIAS 03 E 16
     c_nav1, c_nav2 = st.columns([3, 2])
     with c_nav1:
         meses_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
@@ -1056,7 +1149,7 @@ if st.session_state.bloco_ativo == "previstos":
     with c_nav2:
         c_prev_m, c_next_m = st.columns(2)
         with c_prev_m:
-            if st.button("◀", key="m_ant"):
+            if st.button("◀", key="m_ant", help="Ciclo Anterior"):
                 if st.session_state.cal_mes == 1:
                     st.session_state.cal_mes = 12
                     st.session_state.cal_ano -= 1
@@ -1064,7 +1157,7 @@ if st.session_state.bloco_ativo == "previstos":
                     st.session_state.cal_mes -= 1
                 st.rerun()
         with c_next_m:
-            if st.button("▶", key="m_prox"):
+            if st.button("▶", key="m_prox", help="Próximo Ciclo"):
                 if st.session_state.cal_mes == 12:
                     st.session_state.cal_mes = 1
                     st.session_state.cal_ano += 1
@@ -1076,8 +1169,6 @@ if st.session_state.bloco_ativo == "previstos":
     mes_sel = st.session_state.cal_mes
     
     eventos_por_dia = {}
-    
-    # 1. Carrega previsões comuns
     if not df_prev.empty:
         for _, row in df_prev.iterrows():
             try:
@@ -1090,7 +1181,6 @@ if st.session_state.bloco_ativo == "previstos":
             except:
                 pass
 
-    # 2. Carrega também as entradas de reembolso destinadas no calendário
     if not df_reemb_itens.empty:
         for _, row_r in df_reemb_itens.iterrows():
             try:
@@ -1124,9 +1214,12 @@ if st.session_state.bloco_ativo == "previstos":
                 html_cal += '<td class="cal-cell" style="background: transparent; border-color: transparent;"></td>'
             else:
                 is_today = (dia == hoje.day and mes_sel == hoje.month and ano_sel == hoje.year)
+                is_payday = (dia in [3, 16])
                 classes = ["cal-cell"]
                 if is_today:
                     classes.append("today")
+                if is_payday:
+                    classes.append("payday")
 
                 badges_html = ""
                 if dia in eventos_por_dia:
@@ -1146,15 +1239,18 @@ if st.session_state.bloco_ativo == "previstos":
                         badges_html += f'<span class="cal-badge {cls_b}">{v_curto}</span>'
 
                 cls_str = " ".join(classes)
-                html_cal += f'<td class="{cls_str}"><span style="color: {"#38bdf8" if is_today else "#94a3b8"};">{dia}</span>{badges_html}</td>'
+                cor_num = "#eab308" if is_payday else ("#38bdf8" if is_today else "#94a3b8")
+                tag_dia = f"💰{dia}" if is_payday else f"{dia}"
+                html_cal += f'<td class="{cls_str}"><span style="color: {cor_num};">{tag_dia}</span>{badges_html}</td>'
         html_cal += '</tr>'
     html_cal += '</tbody></table>'
 
     st.markdown(html_cal, unsafe_allow_html=True)
     st.markdown("""
-    <div style="display: flex; gap: 12px; margin: 8px 0 12px 0; font-size: 0.65rem;">
-        <span style="color: #4ade80;">🟢 Dia com valor a receber / reembolso</span>
-        <span style="color: #f87171;">🔴 Dia com valor a pagar</span>
+    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 12px 0; font-size: 0.64rem;">
+        <span style="color: #eab308;">💰 Dias 03 e 16 (Renda Fixa)</span>
+        <span style="color: #4ade80;">🟢 Entrada / Reembolso</span>
+        <span style="color: #f87171;">🔴 Conta a Pagar</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1243,12 +1339,12 @@ if st.session_state.bloco_ativo == "previstos":
                 tipo_prev = st.selectbox("Tipo de Operação", ["Entrada", "Saída"])
                 valor_prev = st.number_input("Valor Estimado (R$)", min_value=0.01, value=1500.00, step=50.0)
             with c_p2:
-                desc_prev = st.text_input("Descrição", value="Salário / Pix / Boleto")
+                desc_prev = st.text_input("Descrição", value="Salário Dia 03 / Dia 16")
                 banco_prev = st.selectbox("Banco Envolvido", df_bancos["banco"].tolist())
-                cat_prev = st.selectbox("Categoria", ["Renda", "Salário", "Fatura", "Contas Fixas", "Lazer", "Outros"])
+                cat_prev = st.selectbox("Categoria", ["Salário", "Renda", "Fatura", "Contas Fixas", "Lazer", "Outros"])
             
             st.markdown('<div style="margin-top: 6px; padding: 8px; background: #0d1522; border-radius: 10px; border: 1px solid #1a273b;">', unsafe_allow_html=True)
-            fixo_check = st.checkbox("📌 Fixar Renda/Gasto Recorrente (Mesmo dia todos os meses)")
+            fixo_check = st.checkbox("📌 Fixar Renda/Gasto Recorrente (Mesmo dia todos os meses)", value=True)
             meses_qtd = st.slider("Repetir por quantos meses consecutivos?", min_value=1, max_value=12, value=1)
             st.markdown('</div>', unsafe_allow_html=True)
                 
@@ -1267,58 +1363,61 @@ if st.session_state.bloco_ativo == "previstos":
                 st.success(f"Previsão agendada com sucesso para {meses_qtd} mês(es)!")
                 st.rerun()
 
-    # Lista de Previsões Agendadas
-    st.markdown('<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Lista Detalhada de Previsões:</div>', unsafe_allow_html=True)
-    if df_prev.empty and df_reemb_itens.empty:
-        st.info("Nenhuma previsão agendada.")
+    # Lista de Previsões do Ciclo Ativo (com botão ✅ Efetivar)
+    st.markdown(f'<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Lançamentos deste Ciclo ({dt_ciclo_ini.strftime("%d/%m")} a {dt_ciclo_fim.strftime("%d/%m")}):</div>', unsafe_allow_html=True)
+    if df_prev_ciclo.empty and df_reemb_ciclo.empty:
+        st.info("Nenhuma previsão agendada dentro deste período.")
     else:
-        # Exibe previsões normais
-        for idx, row_p in df_prev.iterrows():
+        for idx, row_p in df_prev_ciclo.iterrows():
             is_ent = row_p["tipo"] == "Entrada"
             sinal_p = "+" if is_ent else "-"
             cor_p = "#4ade80" if is_ent else "#f87171"
             tag_fixo = " • 📌 Fixa" if row_p.get("fixo", 0) == 1 else ""
             
-            col_info, col_botoes = st.columns([3.4, 2.6])
-            with col_info:
-                st.markdown(f"""
-                <div class="prev-item-card" style="margin-bottom: 6px;">
-                    <div>
-                        <div style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">{row_p['descricao']}</div>
-                        <div style="font-size: 0.63rem; color: #94a3b8;">📅 {row_p['data_prevista']} • {row_p['banco']}{tag_fixo}</div>
-                    </div>
-                    <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.85rem; color: {cor_p}; text-align: right;">
-                        {sinal_p} R$ {row_p['valor']:,.2f}
-                    </div>
+            st.markdown(f"""
+            <div class="prev-item-card" style="margin-bottom: 4px;">
+                <div>
+                    <div style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">{row_p['descricao']}</div>
+                    <div style="font-size: 0.63rem; color: #94a3b8;">📅 {row_p['data_prevista']} • {row_p['banco']}{tag_fixo}</div>
                 </div>
-                """, unsafe_allow_html=True)
-            with col_botoes:
-                c_cp, c_ed, c_del = st.columns(3)
-                with c_cp:
-                    st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
-                    if st.button("📋", key=f"btn_cp_{row_p['id']}", help="Copiar este lançamento para outro mês"):
-                        st.session_state.copiando_prev = row_p.to_dict()
+                <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.85rem; color: {cor_p}; text-align: right;">
+                    {sinal_p} R$ {row_p['valor']:,.2f}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            c_ef, c_cp, c_ed, c_del = st.columns([1.6, 1, 1, 1])
+            with c_ef:
+                st.markdown('<div class="btn-action-icon" style="margin-bottom: 8px;">', unsafe_allow_html=True)
+                if st.button("✅ Baixar", key=f"btn_efet_{row_p['id']}", help="Efetivar no saldo do banco e extrato"):
+                    efetivar_previsto(row_p["id"])
+                    st.success("Efetivado no banco!")
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+            with c_cp:
+                st.markdown('<div class="btn-action-icon" style="margin-bottom: 8px;">', unsafe_allow_html=True)
+                if st.button("📋", key=f"btn_cp_{row_p['id']}", help="Copiar para outro mês"):
+                    st.session_state.copiando_prev = row_p.to_dict()
+                    st.session_state.editando_id = None
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+            with c_ed:
+                st.markdown('<div class="btn-action-icon" style="margin-bottom: 8px;">', unsafe_allow_html=True)
+                if st.button("✏️", key=f"btn_edit_{row_p['id']}", help="Editar"):
+                    st.session_state.editando_id = row_p["id"]
+                    st.session_state.copiando_prev = None
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+            with c_del:
+                st.markdown('<div class="btn-clear" style="margin-bottom: 8px;">', unsafe_allow_html=True)
+                if st.button("🗑️", key=f"del_p_{row_p['id']}", help="Excluir"):
+                    remover_previsto(row_p["id"])
+                    if st.session_state.editando_id == row_p["id"]:
                         st.session_state.editando_id = None
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with c_ed:
-                    st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
-                    if st.button("✏️", key=f"btn_edit_{row_p['id']}", help="Editar este lançamento"):
-                        st.session_state.editando_id = row_p["id"]
-                        st.session_state.copiando_prev = None
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with c_del:
-                    st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                    if st.button("🗑️", key=f"del_p_{row_p['id']}", help="Remover esta previsão"):
-                        remover_previsto(row_p["id"])
-                        if st.session_state.editando_id == row_p["id"]:
-                            st.session_state.editando_id = None
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
-        # Exibe os reembolsos agendados na lista de previsões também
-        for idx_r, row_r in df_reemb_itens.iterrows():
+        for idx_r, row_r in df_reemb_ciclo.iterrows():
             col_info_r, col_botoes_r = st.columns([4.8, 1.2])
             with col_info_r:
                 st.markdown(f"""
@@ -1334,7 +1433,7 @@ if st.session_state.bloco_ativo == "previstos":
                 """, unsafe_allow_html=True)
             with col_botoes_r:
                 st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                if st.button("↩️", key=f"del_prev_reemb_{row_r['id']}", help="Estornar esta destinação de reembolso"):
+                if st.button("↩️", key=f"del_prev_reemb_{row_r['id']}", help="Estornar esta destinação"):
                     estornar_item_destino(row_r["id"])
                     st.success("Reembolso estornado!")
                     st.rerun()
@@ -1589,21 +1688,45 @@ elif st.session_state.bloco_ativo == "graficos":
     st.markdown('<div class="panel-box">', unsafe_allow_html=True)
     c_tit, c_fech = st.columns([5, 1])
     with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📊 Diagnóstico Inteligente & Saúde Financeira</span>', unsafe_allow_html=True)
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📊 Diagnóstico do Ciclo (03 a 03)</span>', unsafe_allow_html=True)
     with c_fech:
         if st.button("✕", key="fechar_diag_inteligente"):
             st.session_state.bloco_ativo = None
             st.rerun()
 
+    dt_ciclo_ini, dt_ciclo_fim, dt_prox_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (03 a 03)")
+    st.caption(f"Período analisado: **{dt_ciclo_ini.strftime('%d/%m/%Y')}** até **{dt_ciclo_fim.strftime('%d/%m/%Y')}** (Renda dias 03 e 16)")
+
     tot_saldo = df_bancos["saldo_conta"].sum()
     tot_faturas = df_bancos[df_bancos["tem_cartao"] == 1]["fatura_atual"].sum()
     tot_cheque = df_bancos["cheque_especial_usado"].sum()
     
-    entradas_prev_base = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() if not df_prev.empty else 0.0
-    entradas_reemb_total = df_reemb_itens["valor"].sum() if not df_reemb_itens.empty else 0.0
+    # Filtra previsões do ciclo 03 a 03
+    entradas_prev_base = 0.0
+    tot_saidas_mes = 0.0
+    if not df_prev.empty:
+        for _, r in df_prev.iterrows():
+            try:
+                d_obj = datetime.strptime(r["data_prevista"], "%Y-%m-%d").date()
+                if dt_ciclo_ini <= d_obj <= dt_ciclo_fim:
+                    if r["tipo"] == "Entrada":
+                        entradas_prev_base += float(r["valor"])
+                    else:
+                        tot_saidas_mes += float(r["valor"])
+            except:
+                pass
+
+    entradas_reemb_total = 0.0
+    if not df_reemb_itens.empty:
+        for _, r in df_reemb_itens.iterrows():
+            try:
+                d_obj = datetime.strptime(r["data"], "%Y-%m-%d").date()
+                if dt_ciclo_ini <= d_obj <= dt_ciclo_fim:
+                    entradas_reemb_total += float(r["valor"])
+            except:
+                pass
+
     tot_entradas_mes = entradas_prev_base + entradas_reemb_total
-    
-    tot_saidas_mes = df_prev[df_prev["tipo"] == "Saída"]["valor"].sum() if not df_prev.empty else 0.0
     saldo_projetado_mes = tot_saldo + tot_entradas_mes - tot_saidas_mes
     
     tot_parc_mes = df_parc["valor_parcela"].sum() if not df_parc.empty else 0.0
@@ -1621,19 +1744,19 @@ elif st.session_state.bloco_ativo == "graficos":
                 <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #f87171;">R$ {tot_faturas:,.2f}</div>
             </div>
             <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">ENTRADAS PREVISTAS</span>
+                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">ENTRADAS DO CICLO</span>
                 <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #4ade80;">+ R$ {tot_entradas_mes:,.2f}</div>
             </div>
             <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 700;">SALDO PROJETADO FINAL</span>
+                <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 700;">PROJEÇÃO ATÉ DIA 03</span>
                 <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: {'#4ade80' if saldo_projetado_mes >= 0 else '#f87171'};">
                     R$ {saldo_projetado_mes:,.2f}
                 </div>
             </div>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.66rem; color: #94a3b8; margin-top: 8px; padding-top: 6px; border-top: 1px solid #1c2a3d;">
-            <span>Cheque Especial em Uso: <strong style="color: {'#f87171' if tot_cheque > 0 else '#4ade80'};">R$ {tot_cheque:,.2f}</strong></span>
-            <span>Parcelas do Mês: <strong style="color: #fbbf24;">R$ {tot_parc_mes:,.2f}</strong></span>
+            <span>Cheque Especial: <strong style="color: {'#f87171' if tot_cheque > 0 else '#4ade80'};">R$ {tot_cheque:,.2f}</strong></span>
+            <span>Parcelas no Ciclo: <strong style="color: #fbbf24;">R$ {tot_parc_mes:,.2f}</strong></span>
         </div>
     </div>
     ''', unsafe_allow_html=True)
@@ -1643,13 +1766,13 @@ elif st.session_state.bloco_ativo == "graficos":
         diagnosticos.append({
             "titulo": "Eliminação de Cheque Especial",
             "tipo": "danger",
-            "desc": f"Existe um saldo emergencial em uso de R$ {tot_cheque:,.2f}. Os juros dessa modalidade estão entre os mais onerosos do sistema. Priorize a alocação de reembolsos KM diretamente para liquidar este saldo antes de qualquer gasto discricionário."
+            "desc": f"Existe saldo emergencial em uso de R$ {tot_cheque:,.2f}. Use o recebimento do dia 03 ou 16 (ou reembolsos KM) para zerar este limite antes de qualquer gasto variável."
         })
     else:
         diagnosticos.append({
             "titulo": "Cheque Especial Preservado",
             "tipo": "success",
-            "desc": "Nenhuma instituição financeira está cobrando juros emergenciais. Sua linha de crédito está 100% livre para eventuais incidentes."
+            "desc": "Nenhuma conta está pagando juros emergenciais neste ciclo."
         })
         
     if tot_faturas > (tot_saldo + tot_entradas_mes):
@@ -1657,13 +1780,13 @@ elif st.session_state.bloco_ativo == "graficos":
         diagnosticos.append({
             "titulo": "Risco de Financiamento de Fatura",
             "tipo": "danger",
-            "desc": f"O montante consolidado em faturas de cartão (R$ {tot_faturas:,.2f}) excede a sua capacidade líquida de pagamento em R$ {deficit:,.2f}. Evite novas compras no crédito e concentre os reembolsos pendentes para abatimento direto antes da data de fechamento."
+            "desc": f"Suas faturas (R$ {tot_faturas:,.2f}) superam sua liquidez projetada até o dia 03 em R$ {deficit:,.2f}. Evite passar novas despesas no crédito e priorize o abatimento direto."
         })
     else:
         diagnosticos.append({
             "titulo": "Cobertura Integral das Faturas",
             "tipo": "success",
-            "desc": "A liquidez atual somada aos recebimentos previstos cobre com segurança a totalidade das obrigações de cartão."
+            "desc": "A soma do saldo atual com as entradas dos dias 03 e 16 cobre 100% das faturas deste fechamento."
         })
         
     if tot_entradas_mes > 0:
@@ -1672,7 +1795,7 @@ elif st.session_state.bloco_ativo == "graficos":
             diagnosticos.append({
                 "titulo": "Comprometimento de Renda em Parcelas",
                 "tipo": "warning",
-                "desc": f"As compras parceladas somam R$ {tot_parc_mes:,.2f}, comprometendo {pct_parc:.1f}% da sua receita estimada no mês. Evite novos parcelamentos até a quitação dos planos vigentes (saldo devedor restante: R$ {tot_restante_parc:,.2f})."
+                "desc": f"As parcelas somam R$ {tot_parc_mes:,.2f} ({pct_parc:.1f}% das entradas do ciclo). Evite novos parcelamentos até liquidar parte do saldo restante (R$ {tot_restante_parc:,.2f})."
             })
 
     st.markdown('<div style="font-size: 0.74rem; font-weight: 800; color: #ffffff; margin-bottom: 6px;">📋 O QUE VOCÊ DEVE FAZER:</div>', unsafe_allow_html=True)
@@ -1690,15 +1813,15 @@ elif st.session_state.bloco_ativo == "graficos":
     pdf_bytes = gerar_relatorio_pdf(df_bancos, tot_entradas_mes, tot_saidas_mes, saldo_projetado_mes, tot_parc_mes, tot_restante_parc, diagnosticos)
     
     texto_whatsapp = (
-        f"*RELATÓRIO FINANCEIRO & SAÚDE*\\n"
-        f"Data: {datetime.now().strftime('%d/%m/%Y às %H:%M')}\\n\\n"
+        f"*RELATÓRIO FINANCEIRO (CICLO {dt_ciclo_ini.strftime('%d/%m')} a {dt_ciclo_fim.strftime('%d/%m')})*\\n"
+        f"Gerado em: {datetime.now().strftime('%d/%m/%Y às %H:%M')}\\n\\n"
         f"• *Saldo em Conta:* R$ {tot_saldo:,.2f}\\n"
         f"• *Faturas Totais:* R$ {tot_faturas:,.2f}\\n"
         f"• *Cheque Especial em Uso:* R$ {tot_cheque:,.2f}\\n"
-        f"• *Entradas Previstas:* R$ {tot_entradas_mes:,.2f}\\n"
+        f"• *Entradas do Ciclo (03 e 16):* R$ {tot_entradas_mes:,.2f}\\n"
         f"• *Saídas Previstas:* R$ {tot_saidas_mes:,.2f}\\n"
-        f"• *Saldo Projetado Final:* R$ {saldo_projetado_mes:,.2f}\\n"
-        f"• *Parcelas no Mês:* R$ {tot_parc_mes:,.2f} (Restante: R$ {tot_restante_parc:,.2f})\\n\\n"
+        f"• *Projeção até dia 03:* R$ {saldo_projetado_mes:,.2f}\\n"
+        f"• *Parcelas no Ciclo:* R$ {tot_parc_mes:,.2f} (Restante: R$ {tot_restante_parc:,.2f})\\n\\n"
         f"*DIAGNÓSTICO E AÇÕES:*\\n"
     )
     for d in diagnosticos:
@@ -1711,7 +1834,7 @@ elif st.session_state.bloco_ativo == "graficos":
         st.download_button(
             label="📄 Baixar Relatório (PDF)",
             data=pdf_bytes,
-            file_name=f"relatorio_financeiro_{datetime.now().strftime('%Y_%m_%d')}.pdf",
+            file_name=f"relatorio_ciclo_{dt_ciclo_ini.strftime('%Y_%m_%d')}.pdf",
             mime="application/pdf",
             key="btn_download_relatorio_pdf"
         )
@@ -2078,13 +2201,18 @@ with tab_novo:
                                 """, (valor_final_fatura, novo_liberado, banco_alvo))
                                 
                             if atualizar_extrato_cc:
+                                novos_cc = 0
                                 for tr in transacoes_ofx:
-                                    val_trn = abs(tr["valor"])
-                                    tipo_trn = "Saída" if tr["valor"] < 0 else "Entrada"
-                                    c.execute("""
-                                        INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo)
-                                        VALUES (?, ?, ?, 'OFX / Cartão', ?, 'Cartão de Crédito', ?)
-                                    """, (tr["data"], tr["descricao"], val_trn, banco_alvo, tipo_trn))
+                                    fitid_val = tr.get("fitid", "")
+                                    c.execute("SELECT COUNT(*) FROM transacoes WHERE fitid = ? AND banco = ? AND meio = 'Cartão de Crédito'", (fitid_val, banco_alvo))
+                                    if c.fetchone()[0] == 0:
+                                        val_trn = abs(tr["valor"])
+                                        tipo_trn = "Saída" if tr["valor"] < 0 else "Entrada"
+                                        c.execute("""
+                                            INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo, fitid)
+                                            VALUES (?, ?, ?, 'OFX / Cartão', ?, 'Cartão de Crédito', ?, ?)
+                                        """, (tr["data"], tr["descricao"], val_trn, banco_alvo, tipo_trn, fitid_val))
+                                        novos_cc += 1
                                     
                             conn.commit()
                             conn.close()
@@ -2111,13 +2239,18 @@ with tab_novo:
                                 """, (valor_final_saldo, banco_alvo))
                                 
                             if atualizar_extrato_conta:
+                                novos_ct = 0
                                 for tr in transacoes_ofx:
-                                    val_trn = abs(tr["valor"])
-                                    tipo_trn = "Saída" if tr["valor"] < 0 else "Entrada"
-                                    c.execute("""
-                                        INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo)
-                                        VALUES (?, ?, ?, 'OFX / Conta', ?, 'Conta Corrente / Pix', ?)
-                                    """, (tr["data"], tr["descricao"], val_trn, banco_alvo, tipo_trn))
+                                    fitid_val = tr.get("fitid", "")
+                                    c.execute("SELECT COUNT(*) FROM transacoes WHERE fitid = ? AND banco = ? AND meio = 'Conta Corrente / Pix'", (fitid_val, banco_alvo))
+                                    if c.fetchone()[0] == 0:
+                                        val_trn = abs(tr["valor"])
+                                        tipo_trn = "Saída" if tr["valor"] < 0 else "Entrada"
+                                        c.execute("""
+                                            INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo, fitid)
+                                            VALUES (?, ?, ?, 'OFX / Conta', ?, 'Conta Corrente / Pix', ?, ?)
+                                        """, (tr["data"], tr["descricao"], val_trn, banco_alvo, tipo_trn, fitid_val))
+                                        novos_ct += 1
                                     
                             conn.commit()
                             conn.close()
@@ -2185,3 +2318,26 @@ with tab_ajustes:
             )
             st.success("Configurações atualizadas!")
             st.rerun()
+
+
+    st.markdown('<div class="sec-header" style="margin-top: 1.4rem;">Backup & Segurança dos Dados</div>', unsafe_allow_html=True)
+    c_bk1, c_bk2 = st.columns(2)
+    with c_bk1:
+        if os.path.exists("financas.db"):
+            with open("financas.db", "rb") as f_db:
+                db_bytes = f_db.read()
+            st.download_button(
+                label="📥 Baixar Backup (.db)",
+                data=db_bytes,
+                file_name=f"backup_financas_{datetime.now().strftime('%Y_%m_%d')}.db",
+                mime="application/octet-stream",
+                key="btn_download_backup_db"
+            )
+    with c_bk2:
+        up_db = st.file_uploader("Restaurar Backup (.db)", type=["db"], key="uploader_restore_db", label_visibility="collapsed")
+        if up_db is not None:
+            if st.button("📤 Restaurar Arquivo", key="btn_confirm_restore_db"):
+                with open("financas.db", "wb") as f_out:
+                    f_out.write(up_db.read())
+                st.success("Banco de dados restaurado com sucesso!")
+                st.rerun()
