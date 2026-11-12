@@ -7,398 +7,342 @@ import calendar
 import hashlib
 from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
-
 import io
 import urllib.parse
 
-st.set_page_config(page_title="Minhas Finanças", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="Minhas Finanças • OLED Pro", page_icon="💳", layout="centered")
 
-# Estilo Moderno Dark Bento UI / MacroDroid
+# ================= ESTILO OLED MOBILE-FIRST PRO / REVOLUT METAL =================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
 
     html, body, .stApp {
-        background-color: #0b0f17 !important;
-        color: #f1f5f9;
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        background-color: #000000 !important;
+        color: #ffffff !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    
-    .block-container { 
-        max-width: 440px !important; 
-        padding-top: 1rem !important; 
-        padding-bottom: 3.5rem !important;
+
+    .block-container {
+        max-width: 450px !important;
+        padding-top: 0.85rem !important;
+        padding-bottom: 5.5rem !important;
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+        background:
+            radial-gradient(circle at 0% 18%, rgba(139, 92, 246, 0.14) 0%, transparent 45%),
+            radial-gradient(circle at 100% 18%, rgba(34, 211, 238, 0.12) 0%, transparent 45%),
+            #000000;
     }
 
     #MainMenu, footer, header { visibility: hidden; }
 
-    /* Barra Superior */
-    .md-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.2rem;
-        padding: 4px 2px;
-    }
-    .md-title-box h2 {
-        font-size: 1.25rem;
-        font-weight: 800;
-        color: #ffffff;
-        margin: 0;
-        letter-spacing: -0.4px;
-    }
-    .md-title-box span {
-        font-size: 0.72rem;
-        color: #94a3b8;
-        font-weight: 500;
-    }
-    .md-status-badge {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        background: #162032;
-        color: #38bdf8;
-        border: 1px solid #223249;
-        padding: 5px 12px;
-        border-radius: 9999px;
-        font-size: 0.7rem;
-        font-weight: 700;
-    }
-    .md-dot-active {
-        width: 8px;
-        height: 8px;
-        background-color: #22c55e;
-        border-radius: 50%;
-        box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
-    }
-
-    /* Card Master */
-    .md-hero-card {
-        background: linear-gradient(145deg, #182335 0%, #101826 100%);
-        border: 1px solid #24354f;
-        border-radius: 22px;
-        padding: 1.3rem;
-        margin-bottom: 1.2rem;
-        box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.4);
-    }
-    .md-hero-label {
-        font-size: 0.68rem;
-        font-weight: 700;
-        color: #94a3b8;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-    }
-    .md-hero-val {
-        font-family: 'JetBrains Mono', monospace !important;
-        font-size: 2.1rem;
-        font-weight: 800;
-        color: #ffffff;
-        margin: 6px 0 10px 0;
-        letter-spacing: -1px;
-    }
-    .md-msg-pill {
-        display: inline-block;
-        padding: 4px 10px;
-        border-radius: 8px;
-        font-size: 0.72rem;
-        font-weight: 700;
-        margin-bottom: 10px;
-    }
-    .msg-danger { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-    .msg-warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-    .msg-success { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
-    .msg-neutral { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
-
-    .md-hero-footer {
-        display: flex;
-        justify-content: space-between;
-        padding-top: 10px;
-        border-top: 1px solid #202e44;
-        font-size: 0.75rem;
-        color: #94a3b8;
-    }
-
-    /* Botões de Recursos Rápidos */
-    .recursos-box {
-        margin-bottom: 1.2rem;
-    }
-    .recursos-box button {
-        background: #141d2a !important;
-        border: 1px solid #223247 !important;
-        border-radius: 14px !important;
-        color: #f1f5f9 !important;
-        font-size: 0.74rem !important;
-        font-weight: 700 !important;
-        padding: 0.55rem 0.2rem !important;
-        min-height: 48px !important;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
-        transition: all 0.2s ease !important;
-        width: 100% !important;
-    }
-    .recursos-box button:hover {
-        border-color: #38bdf8 !important;
-        color: #38bdf8 !important;
-        transform: translateY(-1px) !important;
-    }
-
-    /* Bancos / Cards */
-    .sec-header {
-        font-size: 0.75rem;
-        font-weight: 800;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
-        margin: 1.2rem 0 0.8rem 0;
-    }
-    .bank-card {
-        background: #121a28;
-        border: 1px solid #1f2d42;
-        border-radius: 18px;
-        padding: 14px;
-        margin-bottom: 10px;
-    }
-    .bank-card-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
-    }
-    .bank-badge {
-        font-size: 0.88rem;
-        font-weight: 800;
-        color: #ffffff;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .bank-dot {
-        width: 10px;
-        height: 10px;
-        border-radius: 4px;
-    }
-    
-    .bank-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-    }
-    .bank-grid-single {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 8px;
-    }
-    .bank-stat {
-        background: #0c121c;
-        border: 1px solid #182436;
-        border-radius: 12px;
-        padding: 10px;
-    }
-    .bank-stat-full {
-        grid-column: span 2;
-        background: #0c121c;
-        border: 1px solid #182436;
-        border-radius: 12px;
-        padding: 10px;
-    }
-    .bank-stat-lbl {
-        font-size: 0.62rem;
-        color: #64748b;
-        font-weight: 700;
-        text-transform: uppercase;
-    }
-    .bank-stat-val {
-        font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: #ffffff;
-        margin-top: 3px;
-    }
-
-    /* Painel Expansível */
-    .panel-box {
-        background: #141e2e;
-        border: 1px solid #23354f;
-        border-radius: 18px;
-        padding: 16px;
-        margin-top: 0.8rem;
-        margin-bottom: 1.4rem;
-    }
-
-    /* Card Item de Previsão / Parcela */
-    .prev-item-card {
-        background: #0d1522;
-        border: 1px solid #1a273b;
-        border-radius: 12px;
-        padding: 10px 12px;
-        margin-bottom: 8px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .parcela-card {
-        background: #111a28;
-        border: 1px solid #1e2c40;
-        border-radius: 14px;
-        padding: 12px;
-        margin-bottom: 10px;
-    }
-    .parcela-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 6px;
-    }
-    .parcela-progresso {
-        background: #1a2538;
-        height: 6px;
-        border-radius: 4px;
-        overflow: hidden;
-        margin: 8px 0;
-    }
-    .parcela-progresso-bar {
-        background: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
-        height: 100%;
-    }
-
-    /* Botão de Limpar / Danger */
-    .btn-clear button {
-        background: rgba(239, 68, 68, 0.12) !important;
-        color: #f87171 !important;
-        border: 1px solid rgba(239, 68, 68, 0.35) !important;
-        border-radius: 10px !important;
-        font-size: 0.7rem !important;
-        font-weight: 700 !important;
-        padding: 0.35rem 0.6rem !important;
-    }
-    .btn-clear button:hover {
-        background: rgba(239, 68, 68, 0.25) !important;
-        border-color: #f87171 !important;
-    }
-
-    /* Botão de Ação / Ícone */
-    .btn-action-icon button {
-        background: rgba(56, 189, 248, 0.12) !important;
-        color: #38bdf8 !important;
-        border: 1px solid rgba(56, 189, 248, 0.35) !important;
-        border-radius: 10px !important;
-        font-size: 0.72rem !important;
-        font-weight: 700 !important;
-        padding: 0.35rem 0.5rem !important;
-    }
-    .btn-action-icon button:hover {
-        background: rgba(56, 189, 248, 0.25) !important;
-        border-color: #38bdf8 !important;
-    }
-
-    /* Abas */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
-        background-color: #121a28;
-        padding: 6px;
-        border-radius: 16px;
-        border: 1px solid #1f2d42;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 36px;
-        border-radius: 10px;
-        color: #94a3b8;
-        font-size: 0.70rem;
-        font-weight: 700;
-        border: none !important;
-        background: transparent;
-        padding: 0 8px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1f2d42 !important;
-        color: #38bdf8 !important;
-    }
-    .stTabs [data-baseweb="tab-highlight"] { display: none; }
-
-    form button {
-        width: 100%;
-        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
-        color: #ffffff !important;
-        border: none !important;
-        border-radius: 14px !important;
-        font-weight: 800 !important;
-        font-size: 0.86rem !important;
-        padding: 0.7rem 1rem !important;
-    }
-
-    /* Tabela do Calendário Visual */
-    .cal-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 4px;
-        margin-top: 8px;
-    }
-    .cal-th {
-        text-align: center;
-        font-size: 0.65rem;
-        font-weight: 700;
-        color: #64748b;
-        padding: 4px 0;
-    }
-    .cal-cell {
-        background: #0d1522;
-        border: 1px solid #1a273b;
-        border-radius: 8px;
-        height: 48px;
-        vertical-align: top;
-        padding: 4px;
-        text-align: right;
-        font-size: 0.65rem;
-        font-weight: 600;
+    /* Cartão Metálico Revolut Metal / Nubank Pro */
+    .metal-card-stage {
         position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 8px;
     }
-    .cal-cell.payday {
-        border-color: #eab308 !important;
-        box-shadow: inset 0 0 6px rgba(234, 179, 8, 0.35);
+    .metal-card {
+        width: 100%;
+        height: 172px;
+        border-radius: 20px;
+        padding: 18px 20px;
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(135deg, #27272a 0%, #3f3f46 38%, #18181b 72%, #27272a 100%);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        box-shadow:
+            0 16px 36px rgba(0, 0, 0, 0.85),
+            inset 0 1px 0 rgba(255, 255, 255, 0.28),
+            -12px 0 30px rgba(139, 92, 246, 0.22),
+            12px 0 30px rgba(34, 211, 238, 0.18);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
-    .cal-cell.today {
-        border-color: #38bdf8 !important;
-        box-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
+    .metal-card::before {
+        content: "";
+        position: absolute;
+        top: -40%;
+        left: -20%;
+        width: 140%;
+        height: 140%;
+        background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.09) 48%, transparent 62%);
+        pointer-events: none;
     }
-    .cal-cell.has-entrada {
-        background: rgba(34, 197, 94, 0.16) !important;
-        border-color: rgba(34, 197, 94, 0.65) !important;
+    .metal-card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 1;
     }
-    .cal-cell.has-saida {
-        background: rgba(239, 68, 68, 0.16) !important;
-        border-color: rgba(239, 68, 68, 0.65) !important;
+    .metal-tier {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #f4f4f5;
+        letter-spacing: -0.01em;
     }
-    .cal-cell.has-reemb-livre {
-        background: rgba(234, 179, 8, 0.16) !important;
-        border-color: rgba(234, 179, 8, 0.75) !important;
-    }
-    .cal-cell.has-ambos {
-        background: rgba(245, 158, 11, 0.16) !important;
-        border-color: rgba(245, 158, 11, 0.65) !important;
-    }
-    .cal-badge {
-        font-size: 0.54rem;
+    .metal-logo-r {
+        font-size: 1.05rem;
         font-weight: 800;
-        font-family: 'JetBrains Mono', monospace;
-        display: block;
-        text-align: left;
+        color: rgba(255, 255, 255, 0.85);
+        font-family: 'Inter', sans-serif;
+    }
+    .metal-chip {
+        width: 34px;
+        height: 25px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, #e4e4e7 0%, #a1a1aa 50%, #d4d4d8 100%);
+        border: 1px solid rgba(0, 0, 0, 0.35);
+        position: relative;
+        z-index: 1;
         margin-top: 2px;
+    }
+    .metal-chip::after {
+        content: "";
+        position: absolute;
+        inset: 4px;
+        border: 1px solid rgba(0, 0, 0, 0.25);
         border-radius: 3px;
-        padding: 1px 2px;
+    }
+    .metal-card-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        z-index: 1;
+    }
+    .metal-bank-name {
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: #e4e4e7;
+    }
+    .metal-card-meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.66rem;
+        color: #a1a1aa;
+        margin-top: 2px;
+    }
+    .metal-circles {
+        display: flex;
+        align-items: center;
+    }
+    .mc-c1 {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.35);
+    }
+    .mc-c2 {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.65);
+        margin-left: -8px;
+    }
+    .card-dots {
+        display: flex;
+        justify-content: center;
+        gap: 6px;
+        margin: 6px 0 12px 0;
+    }
+    .c-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #3f3f46;
+    }
+    .c-dot.active {
+        width: 14px;
+        border-radius: 99px;
+        background: #a855f7;
+    }
+
+    /* Main Balance Section */
+    .main-bal-lbl {
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: #a1a1aa;
+        margin-bottom: 2px;
+    }
+    .main-bal-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 4px;
+    }
+    .main-bal-val {
+        font-family: 'Inter', sans-serif;
+        font-size: 2.05rem;
+        font-weight: 800;
+        color: #ffffff;
+        letter-spacing: -0.03em;
         line-height: 1.1;
     }
-    .badge-in { color: #4ade80; }
-    .badge-out { color: #f87171; }
-    .badge-reemb-livre { color: #fbbf24; }
+    .pct-pill {
+        background: rgba(16, 185, 129, 0.16);
+        border: 1px solid rgba(16, 185, 129, 0.32);
+        color: #34d399;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 999px;
+    }
+    .pct-pill.neg {
+        background: rgba(244, 63, 94, 0.16);
+        border-color: rgba(244, 63, 94, 0.32);
+        color: #fb7185;
+    }
+    .sub-bal-row {
+        font-size: 0.70rem;
+        color: #71717a;
+        margin-bottom: 12px;
+    }
 
-    /* Grade do Calendário de Alocações 100% Responsiva no Celular (7 colunas fixas via :has) */
+    /* Quick Actions Pills */
+    .qa-title {
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: #a1a1aa;
+        margin-bottom: 8px;
+    }
+
+    /* Bento Cards OLED (Allocation & Earnings) */
+    .oled-bento-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin: 10px 0 12px 0;
+    }
+    .oled-card {
+        background: #0a0a0c;
+        border-radius: 18px;
+        padding: 13px 14px;
+        position: relative;
+        overflow: hidden;
+    }
+    .oled-card.purple-glow {
+        border: 1px solid rgba(168, 85, 247, 0.45);
+        box-shadow: inset 0 0 24px rgba(168, 85, 247, 0.08);
+    }
+    .oled-card.cyan-glow {
+        border: 1px solid rgba(34, 211, 238, 0.38);
+        box-shadow: inset 0 0 24px rgba(34, 211, 238, 0.06);
+    }
+    .oled-card-hdr {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.80rem;
+        font-weight: 600;
+        color: #f4f4f5;
+        margin-bottom: 6px;
+    }
+    .oled-card-val {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #ffffff;
+        margin: 6px 0 10px 0;
+        letter-spacing: -0.02em;
+    }
+    .oled-prog-txt {
+        font-size: 0.64rem;
+        color: #71717a;
+    }
+    .oled-prog-txt span.p-purple { color: #c084fc; font-weight: 700; }
+    .oled-prog-txt span.p-cyan { color: #38bdf8; font-weight: 700; }
+
+    /* Allocation Calendar Box */
+    .alloc-cal-box {
+        background: #09090b;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 18px;
+        padding: 14px;
+        margin-bottom: 12px;
+    }
+
+    /* Bottom Dual Gradient Cards (Goals & Investment style) */
+    .dual-grad-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 10px;
+        margin-bottom: 12px;
+    }
+    .grad-card-purple {
+        background: linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%);
+        border: 1px solid rgba(192, 132, 252, 0.4);
+        border-radius: 18px;
+        padding: 14px;
+        color: #ffffff;
+    }
+    .grad-card-cyan {
+        background: linear-gradient(135deg, #0e7490 0%, #0284c7 100%);
+        border: 1px solid rgba(56, 189, 248, 0.4);
+        border-radius: 18px;
+        padding: 14px;
+        color: #ffffff;
+    }
+    .grad-card-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.86rem;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+    .grad-card-sub {
+        font-size: 0.68rem;
+        color: rgba(255, 255, 255, 0.82);
+        line-height: 1.35;
+    }
+
+    /* Botões Streamlit no estilo OLED Dark Pill */
+    .stButton > button {
+        background: #141418 !important;
+        color: #f4f4f5 !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 999px !important;
+        font-size: 0.72rem !important;
+        font-weight: 600 !important;
+        padding: 0.40rem 0.65rem !important;
+        transition: all 0.18s ease !important;
+    }
+    .stButton > button:hover {
+        border-color: #a855f7 !important;
+        background: #1e1b29 !important;
+        color: #ffffff !important;
+    }
+    /* Botão Primário (Dias selecionados no Calendário = Pontos Roxos/Ciano iluminados!) */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #7c3aed 0%, #2563eb 100%) !important;
+        border: 1px solid #c084fc !important;
+        color: #ffffff !important;
+        box-shadow: 0 0 10px rgba(139, 92, 246, 0.5) !important;
+    }
+    .btn-clear button {
+        background: rgba(244, 63, 94, 0.12) !important;
+        color: #fb7185 !important;
+        border: 1px solid rgba(244, 63, 94, 0.35) !important;
+    }
+    .btn-action-icon button {
+        background: rgba(168, 85, 247, 0.14) !important;
+        color: #c084fc !important;
+        border: 1px solid rgba(168, 85, 247, 0.35) !important;
+    }
+
+    /* Grade do Calendário de Alocações 100% Responsiva (7 colunas fixas PC e Celular) */
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(7)),
     [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(7)) {
         display: grid !important;
         grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
-        gap: 3px !important;
+        gap: 4px !important;
         width: 100% !important;
-        margin-bottom: 3px !important;
+        margin-bottom: 4px !important;
     }
     [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(7)) > [data-testid="stColumn"],
     [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(7)) > [data-testid="column"] {
@@ -412,14 +356,132 @@ st.markdown("""
     [data-testid="stHorizontalBlock"]:has(> [data-testid="column"]:nth-child(7)) button {
         width: 100% !important;
         min-width: 0 !important;
-        padding: 4px 1px !important;
-        min-height: 34px !important;
-        height: 34px !important;
-        font-size: 0.65rem !important;
+        padding: 2px 0 !important;
+        min-height: 32px !important;
+        height: 32px !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.66rem !important;
         font-weight: 700 !important;
         border-radius: 8px !important;
         line-height: 1 !important;
     }
+
+    /* Quick Actions 4 colunas fixas mesmo no celular */
+    .qa-row [data-testid="stHorizontalBlock"] {
+        display: grid !important;
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        gap: 6px !important;
+    }
+    .qa-row [data-testid="stColumn"],
+    .qa-row [data-testid="column"] {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 0 !important;
+    }
+    .qa-row button {
+        width: 100% !important;
+        padding: 6px 2px !important;
+        font-size: 0.68rem !important;
+        white-space: nowrap !important;
+    }
+
+    /* Bottom Navigation Bar (5 colunas fixas estilo App Nativo) */
+    .bottom-nav-wrap [data-testid="stHorizontalBlock"] {
+        display: grid !important;
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+        gap: 4px !important;
+        background: #0d0d11;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 18px;
+        padding: 6px;
+        margin-top: 14px;
+    }
+    .bottom-nav-wrap [data-testid="stColumn"],
+    .bottom-nav-wrap [data-testid="column"] {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 0 !important;
+    }
+    .bottom-nav-wrap button {
+        width: 100% !important;
+        border-radius: 12px !important;
+        padding: 6px 2px !important;
+        font-size: 0.64rem !important;
+        background: transparent !important;
+        border: none !important;
+        color: #71717a !important;
+    }
+    .bottom-nav-wrap button[kind="primary"] {
+        background: rgba(56, 189, 248, 0.14) !important;
+        color: #38bdf8 !important;
+        border: 1px solid rgba(56, 189, 248, 0.35) !important;
+        box-shadow: none !important;
+    }
+
+    /* Cards internos e listas */
+    .oled-list-item {
+        background: #0b0b0e;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .parcela-progresso {
+        background: #18181b;
+        height: 5px;
+        border-radius: 99px;
+        overflow: hidden;
+        margin: 6px 0;
+    }
+    .parcela-progresso-bar {
+        background: linear-gradient(90deg, #8b5cf6 0%, #38bdf8 100%);
+        height: 100%;
+    }
+    .cal-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 3px;
+        margin-top: 6px;
+    }
+    .cal-th {
+        text-align: center;
+        font-size: 0.62rem;
+        font-weight: 600;
+        color: #71717a;
+        padding: 3px 0;
+    }
+    .cal-cell {
+        background: #0c0c10;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        height: 44px;
+        vertical-align: top;
+        padding: 3px;
+        text-align: right;
+        font-size: 0.62rem;
+        font-weight: 600;
+    }
+    .cal-cell.payday { border-color: #eab308 !important; }
+    .cal-cell.today { border-color: #38bdf8 !important; }
+    .cal-cell.has-entrada { background: rgba(16, 185, 129, 0.16) !important; border-color: rgba(16, 185, 129, 0.55) !important; }
+    .cal-cell.has-saida { background: rgba(244, 63, 94, 0.16) !important; border-color: rgba(244, 63, 94, 0.55) !important; }
+    .cal-cell.has-reemb-livre { background: rgba(234, 179, 8, 0.16) !important; border-color: rgba(234, 179, 8, 0.65) !important; }
+    .cal-cell.has-ambos { background: rgba(168, 85, 247, 0.16) !important; border-color: rgba(168, 85, 247, 0.55) !important; }
+    .cal-badge {
+        font-size: 0.52rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        display: block;
+        text-align: left;
+        margin-top: 1px;
+        line-height: 1.05;
+    }
+    .badge-in { color: #34d399; }
+    .badge-out { color: #fb7185; }
+    .badge-reemb-livre { color: #fbbf24; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1288,27 +1350,52 @@ if "cal_ano" not in st.session_state:
 if "modo_ciclo" not in st.session_state or st.session_state.modo_ciclo not in ["Ciclo Completo (04 a 03)", "1ª Parte (Dia 04 a 15)", "2ª Parte (Dia 16 a 03)"]:
     st.session_state.modo_ciclo = "Ciclo Completo (04 a 03)"
 
-# Barra Superior
-st.markdown("""
-<div class="md-header">
-    <div class="md-title-box">
-        <h2>Painel Financeiro</h2>
-        <span>Visão Integrada de Bancos</span>
-    </div>
-    <div class="md-status-badge">
-        <span class="md-dot-active"></span>
-        Sincronizado
-    </div>
-</div>
-""", unsafe_allow_html=True)
 
-# Calcula Renda Futura LÍQUIDA/LIVRE do Ciclo Ativo (04/MM a 03/MM+1)
-# Desconta tudo o que já está comprometido (saídas previstas no ciclo + reembolsos futuros destinados a abater dívidas)
-dt_hero_ini, dt_hero_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
+def pagar_fatura_cartao(banco_cartao, banco_pagador, valor_pagar):
+    valor_pagar = float(valor_pagar)
+    if valor_pagar <= 0:
+        return
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    dt_fmt = datetime.now().strftime("%d/%m %H:%M")
+    c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (valor_pagar, banco_pagador))
+    c.execute("UPDATE contas_bancarias SET fatura_atual = MAX(0.0, fatura_atual - ?) WHERE banco = ?", (valor_pagar, banco_cartao))
+    c.execute("""
+        INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+        VALUES (?, ?, ?, 'Fatura', 'Saída', ?, 'Conta Corrente / Pix')
+    """, (dt_fmt, f"Pagamento Fatura {banco_cartao}", valor_pagar, banco_pagador))
+    conn.commit()
+    conn.close()
+
+# Valores padrão garantidos para parâmetros de alocação
+if st.session_state.get("inp_diaria_aloc", 0.0) == 0.0:
+    st.session_state.inp_diaria_aloc = 128.78
+if st.session_state.get("inp_gas_aloc", 0.0) == 0.0:
+    st.session_state.inp_gas_aloc = 30.00
+if st.session_state.get("inp_ped_aloc", 0.0) == 0.0:
+    st.session_state.inp_ped_aloc = 25.60
+
+if "aloc_cal_mes" not in st.session_state:
+    st.session_state.aloc_cal_mes = st.session_state.cal_mes
+if "aloc_cal_ano" not in st.session_state:
+    st.session_state.aloc_cal_ano = st.session_state.cal_ano
+
+if "oled_tab" not in st.session_state:
+    st.session_state.oled_tab = "Home"
+
+if "card_idx" not in st.session_state:
+    st.session_state.card_idx = 0
+
+if "qa_subpanel" not in st.session_state:
+    st.session_state.qa_subpanel = None
+
+# ================= CÁLCULOS PRINCIPAIS DO CICLO E ALOCAÇÕES =================
+dt_hero_ini, dt_hero_fim, dt_salario_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
+meses_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+nome_mes_comp = meses_nomes[st.session_state.cal_mes - 1]
 
 entradas_futuras_brutas = 0.0
 saidas_comprometidas_ciclo = 0.0
-
 if not df_prev.empty:
     for _, r_p in df_prev.iterrows():
         try:
@@ -1316,254 +1403,505 @@ if not df_prev.empty:
             if dt_hero_ini <= d_p <= dt_hero_fim:
                 if r_p["tipo"] == "Entrada":
                     entradas_futuras_brutas += float(r_p["valor"])
-                elif r_p["tipo"] == "Saída":
+                else:
                     saidas_comprometidas_ciclo += float(r_p["valor"])
         except:
             pass
 
 reembolsos_livres_futuros = 0.0
-reembolsos_comprometidos_futuros = 0.0
 if not df_reemb_itens.empty:
     for _, r_ri in df_reemb_itens.iterrows():
         if r_ri.get("status", "Efetivado") == "Previsto":
             try:
                 d_r = datetime.strptime(r_ri["data"], "%Y-%m-%d").date()
-                in_window = (dt_hero_ini <= d_r <= dt_hero_fim)
+                in_w = (dt_hero_ini <= d_r <= dt_hero_fim)
             except:
-                in_window = True
-            if in_window:
-                if r_ri["acao"] == "Creditar em Conta Corrente":
-                    reembolsos_livres_futuros += float(r_ri["valor"])
-                else:
-                    # Destinado a abater fatura de cartão ou cheque especial já comprometido
-                    reembolsos_comprometidos_futuros += float(r_ri["valor"])
+                in_w = True
+            if in_w and r_ri["acao"] == "Creditar em Conta Corrente":
+                reembolsos_livres_futuros += float(r_ri["valor"])
 
 renda_futura_livre = (entradas_futuras_brutas - saidas_comprometidas_ciclo) + reembolsos_livres_futuros
 projecao_com_futuro = total_saldos + renda_futura_livre
 
-sinal_rf = "+" if renda_futura_livre >= 0 else "-"
-cor_rf = "#4ade80" if renda_futura_livre >= 0 else "#f87171"
-borda_rf = "rgba(56, 189, 248, 0.35)" if renda_futura_livre >= 0 else "rgba(248, 113, 113, 0.45)"
-bg_rf = "rgba(56, 189, 248, 0.08)" if renda_futura_livre >= 0 else "rgba(239, 68, 68, 0.10)"
+# Progresso do ciclo (04 a 03)
+total_dias_ciclo = max(1, (dt_hero_fim - dt_hero_ini).days)
+dias_passados_ciclo = min(total_dias_ciclo, max(0, (hoje - dt_hero_ini).days))
+pct_ciclo = (dias_passados_ciclo / total_dias_ciclo) * 100.0
 
-# Master Hero Card com Separação Clara: Patrimônio Real vs Renda Futura Livre (Descontado o Comprometido)
-st.markdown(f"""
-<div class="md-hero-card">
-    <div style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 10px; align-items: start;">
-        <div>
-            <div class="md-hero-label">Patrimônio Real em Conta</div>
-            <div class="md-hero-val" style="font-size: 1.75rem; margin: 4px 0 8px 0;">R$ {total_saldos:,.2f}</div>
-            <div class="md-msg-pill {classe_total}" style="margin-bottom: 0; font-size: 0.66rem;">{msg_total}</div>
-        </div>
-        <div style="background: {bg_rf}; border: 1px dashed {borda_rf}; border-radius: 14px; padding: 10px;">
-            <div style="font-size: 0.60rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">⏳ Renda Futura Livre</div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.12rem; font-weight: 800; color: {cor_rf}; margin: 4px 0;">{sinal_rf} R$ {abs(renda_futura_livre):,.2f}</div>
-            <div style="font-size: 0.58rem; color: #94a3b8; line-height: 1.25;">
-                Bruto: R$ {(entradas_futuras_brutas + reembolsos_livres_futuros):,.2f} • Comprom.: -R$ {saidas_comprometidas_ciclo:,.2f}<br>
-                Noção c/ futuro livre: <strong style="color: #e2e8f0;">R$ {projecao_com_futuro:,.2f}</strong>
-            </div>
-        </div>
-    </div>
-    <div class="md-hero-footer" style="margin-top: 12px;">
-        <span>Faturas Cartão: <strong style="color: #ffffff;">R$ {total_faturas:,.2f}</strong></span>
-        <span>Cheque Esp.: <strong style="color: #f87171;">R$ {total_cheque:,.2f}</strong></span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# Dados das Alocações do mês ativo no Calendário de Alocações
+dt_m_ini = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, 1)
+last_day_m = calendar.monthrange(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)[1]
+dt_m_fim = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, last_day_m)
+df_aloc_mes = pd.DataFrame()
+if not df_aloc.empty:
+    df_aloc_mes = df_aloc[(df_aloc["data_alocacao"] >= dt_m_ini.strftime("%Y-%m-%d")) & (df_aloc["data_alocacao"] <= dt_m_fim.strftime("%Y-%m-%d"))]
 
-# RECURSOS RÁPIDOS
-st.markdown('<div class="sec-header">Recursos Rápidos</div>', unsafe_allow_html=True)
-st.markdown('<div class="recursos-box">', unsafe_allow_html=True)
-def resetar_recolhiveis_recurso_rapido():
-    st.session_state.mostrar_form_prev = False
-    st.session_state.mostrar_calc_km = False
-    st.session_state.mostrar_form_rateio = False
-    st.session_state.recolher_lanc_ciclo = True
-    st.session_state.recolher_dest_reemb = True
-    st.session_state.mostrar_cal_aloc = True  # Calendário permanece visível
+qtd_dias_aloc = len(df_aloc_mes)
+tot_diarias_bruto = float(df_aloc_mes["valor_diaria"].sum()) if qtd_dias_aloc > 0 else 0.0
+tot_gas_mes = float(df_aloc_mes["valor_gasolina"].sum()) if qtd_dias_aloc > 0 else 0.0
+tot_ped_mes = float(df_aloc_mes["valor_pedagio"].sum()) if qtd_dias_aloc > 0 else 0.0
+tot_lucro_liq_aloc = tot_diarias_bruto - tot_gas_mes
+tot_reembolso_esperado = tot_diarias_bruto + tot_ped_mes
+pct_aloc_meta = min(100.0, (qtd_dias_aloc / 22.0) * 100.0)
 
-r_col1, r_col2 = st.columns(2)
-with r_col1:
-    if st.button("📅 Previsões & Calendário", key="btn_prev"):
-        if st.session_state.bloco_ativo != "previstos":
-            resetar_recolhiveis_recurso_rapido()
-            st.session_state.bloco_ativo = "previstos"
-        else:
-            st.session_state.bloco_ativo = None
-with r_col2:
-    if st.button("⛽ Destinar Reembolso", key="btn_km"):
-        if st.session_state.bloco_ativo != "destinar_reembolso":
-            resetar_recolhiveis_recurso_rapido()
-            st.session_state.bloco_ativo = "destinar_reembolso"
-        else:
-            st.session_state.bloco_ativo = None
-
-r_col3, r_col4, r_col5 = st.columns(3)
-with r_col3:
-    if st.button("🧠 Advisor", key="btn_adv"):
-        if st.session_state.bloco_ativo != "advisor":
-            resetar_recolhiveis_recurso_rapido()
-            st.session_state.bloco_ativo = "advisor"
-        else:
-            st.session_state.bloco_ativo = None
-with r_col4:
-    if st.button("💳 Vencimentos", key="btn_venc"):
-        if st.session_state.bloco_ativo != "vencimentos":
-            resetar_recolhiveis_recurso_rapido()
-            st.session_state.bloco_ativo = "vencimentos"
-        else:
-            st.session_state.bloco_ativo = None
-with r_col5:
-    if st.button("📊 Gráficos", key="btn_graf"):
-        if st.session_state.bloco_ativo != "graficos":
-            resetar_recolhiveis_recurso_rapido()
-            st.session_state.bloco_ativo = "graficos"
-        else:
-            st.session_state.bloco_ativo = None
-st.markdown('</div>', unsafe_allow_html=True)
-
-# ================= ÁREA DINÂMICA =================
-if st.session_state.bloco_ativo == "previstos":
-    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-    
-    c_tit, c_limp, c_fech = st.columns([3, 2, 1])
-    with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📅 Ciclo & Previsões</span>', unsafe_allow_html=True)
-    with c_limp:
-        st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
-        if st.button("🗑️ Limpar Todos", key="btn_limpar_prev", help="Apaga todas as previsões agendadas"):
-            limpar_todas_previsoes()
-            st.session_state.editando_id = None
-            st.session_state.copiando_prev = None
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with c_fech:
-        if st.button("✕", key="fechar_prev", help="Recolher painel"):
-            st.session_state.bloco_ativo = None
-            st.rerun()
-
-    # Seletor de Período do Ciclo (Competência do Mês: Dia 04 a Dia 03 do mês seguinte)
-    opcoes_ciclo = ["Ciclo Completo (04 a 03)", "1ª Parte (Dia 04 a 15)", "2ª Parte (Dia 16 a 03)"]
-    modo_sel = st.selectbox(
-        "Período de Apuração:",
-        opcoes_ciclo,
-        index=opcoes_ciclo.index(st.session_state.modo_ciclo),
-        key="sel_modo_ciclo_prev"
+# ================= TOPO: CARTÃO METÁLICO REVOLUT METAL / NUBANK PRO =================
+bancos_records = df_bancos.to_dict("records")
+if bancos_records:
+    st.session_state.card_idx = st.session_state.card_idx % len(bancos_records)
+    b_atual = bancos_records[st.session_state.card_idx]
+    b_nome = b_atual["banco"]
+    tem_c = (b_atual.get("tem_cartao", 1) == 1)
+    lim_tot = float(b_atual.get("limite_cartao", 0.0))
+    lim_lib = float(b_atual.get("limite_liberado", 0.0))
+    lim_exib = lim_lib if lim_lib > 0 else max(0.0, lim_tot - float(b_atual["fatura_atual"]))
+    tier_label = "Metal Credit Pro" if tem_c else "Metal Account"
+    meta_card_txt = (
+        f"Saldo R$ {b_atual['saldo_conta']:,.2f} · Fatura R$ {b_atual['fatura_atual']:,.2f} · Livre R$ {lim_exib:,.2f}"
+        if tem_c else
+        f"Saldo R$ {b_atual['saldo_conta']:,.2f} · Cheque Esp. R$ {b_atual['cheque_especial_usado']:,.2f}"
     )
-    if modo_sel != st.session_state.modo_ciclo:
-        st.session_state.modo_ciclo = modo_sel
-        st.rerun()
 
-    dt_ciclo_ini, dt_ciclo_fim, dt_salario_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, st.session_state.modo_ciclo)
-    dt_full_ini, dt_full_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
-
-    meses_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-    nome_mes_comp = meses_nomes[st.session_state.cal_mes - 1]
+    dots_html = "".join(
+        f'<span class="c-dot {"active" if i == st.session_state.card_idx else ""}"></span>'
+        for i in range(len(bancos_records))
+    )
 
     st.markdown(f"""
-    <div style="background: #101929; border: 1px solid #243652; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; font-size: 0.7rem; color: #cbd5e1;">
-        📆 <strong>Competência {nome_mes_comp}/{st.session_state.cal_ano}:</strong> {dt_ciclo_ini.strftime('%d/%m/%Y')} até {dt_ciclo_fim.strftime('%d/%m/%Y')}
-        <div style="font-size: 0.62rem; color: #eab308; margin-top: 2px;">💰 Adiantamento dia 16/{st.session_state.cal_mes:02d} • Salário de {nome_mes_comp} fecha em {dt_salario_03.strftime('%d/%m/%Y')}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Filtrar previsões e reembolsos estritamente dentro do ciclo (04/MM a 03/MM+1)
-    df_prev_ciclo = pd.DataFrame()
-    if not df_prev.empty:
-        mask_p = []
-        for _, r in df_prev.iterrows():
-            try:
-                d_obj = datetime.strptime(r["data_prevista"], "%Y-%m-%d").date()
-                mask_p.append(dt_ciclo_ini <= d_obj <= dt_ciclo_fim)
-            except:
-                mask_p.append(False)
-        df_prev_ciclo = df_prev[mask_p]
-
-    df_reemb_ciclo = pd.DataFrame()
-    if not df_reemb_itens.empty:
-        mask_r = []
-        for _, r in df_reemb_itens.iterrows():
-            try:
-                d_obj = datetime.strptime(r["data"], "%Y-%m-%d").date()
-                mask_r.append(dt_ciclo_ini <= d_obj <= dt_ciclo_fim)
-            except:
-                mask_r.append(False)
-        df_reemb_ciclo = df_reemb_itens[mask_r]
-
-    entradas_prev_base = df_prev_ciclo[df_prev_ciclo["tipo"] == "Entrada"]["valor"].sum() if not df_prev_ciclo.empty else 0.0
-    saidas_prev_base = df_prev_ciclo[df_prev_ciclo["tipo"] == "Saída"]["valor"].sum() if not df_prev_ciclo.empty else 0.0
-
-    reemb_total_ciclo = 0.0
-    reemb_livre_ciclo = 0.0
-    reemb_comprometido_ciclo = 0.0
-    if not df_reemb_ciclo.empty:
-        for _, rr_c in df_reemb_ciclo.iterrows():
-            v_rr = float(rr_c["valor"])
-            reemb_total_ciclo += v_rr
-            if rr_c["acao"] == "Creditar em Conta Corrente":
-                reemb_livre_ciclo += v_rr
-            else:
-                reemb_comprometido_ciclo += v_rr
-
-    # Tudo que entra de fato entra (Salários + Total de Reembolsos)
-    entradas_previstas = entradas_prev_base + reemb_total_ciclo
-    # E o que já sai destinado entra nas saídas/destinados (Contas a pagar + Reembolsos destinados a cartão/cheque)
-    saidas_previstas = saidas_prev_base + reemb_comprometido_ciclo
-    saldo_projetado = total_saldos + entradas_previstas - saidas_previstas
-
-    # PAINEL DE SALDO PREVISTO A RECEBER E COMPARATIVO DO CICLO
-    st.markdown(f"""
-    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 6px 0 14px 0;">
-        <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Balanço {nome_mes_comp} ({dt_ciclo_ini.strftime('%d/%m')} a {dt_ciclo_fim.strftime('%d/%m')})</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
-            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">TOTAL A RECEBER (BRUTO)</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #4ade80;">+ R$ {entradas_previstas:,.2f}</div>
+    <div class="metal-card-stage">
+        <div class="metal-card">
+            <div class="metal-card-top">
+                <span class="metal-tier">{tier_label}</span>
+                <span class="metal-logo-r">R</span>
             </div>
-            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #f87171; font-weight: 700;">SAÍDAS + DESTINADOS</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #f87171;">- R$ {saidas_previstas:,.2f}</div>
-            </div>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
-            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #64748b; font-weight: 700;">SALDO ATUAL EM CONTA</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #ffffff;">R$ {total_saldos:,.2f}</div>
-            </div>
-            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 700;">SALDO PROJETADO FINAL</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: {'#4ade80' if saldo_projetado >= 0 else '#f87171'};">
-                    R$ {saldo_projetado:,.2f}
+            <div class="metal-chip"></div>
+            <div class="metal-card-bottom">
+                <div>
+                    <div class="metal-bank-name">{b_nome}</div>
+                    <div class="metal-card-meta">{meta_card_txt}</div>
+                </div>
+                <div class="metal-circles">
+                    <span class="mc-c1"></span>
+                    <span class="mc-c2"></span>
                 </div>
             </div>
         </div>
     </div>
+    <div class="card-dots">{dots_html}</div>
     """, unsafe_allow_html=True)
 
-    # CALENDÁRIO DO CICLO (04/MM até 03/MM+1)
-    c_nav1, c_nav2 = st.columns([3, 2])
-    with c_nav1:
-        st.markdown(f'<span style="font-size: 0.82rem; font-weight: 800; color: #ffffff;">🗓️ Ciclo {nome_mes_comp}/{st.session_state.cal_ano}</span>', unsafe_allow_html=True)
-    with c_nav2:
-        c_prev_m, c_next_m = st.columns(2)
-        with c_prev_m:
-            if st.button("◀", key="m_ant", help="Ciclo Anterior"):
-                if st.session_state.cal_mes == 1:
-                    st.session_state.cal_mes = 12
-                    st.session_state.cal_ano -= 1
-                else:
-                    st.session_state.cal_mes -= 1
+    # Troca discreta de cartão no carrossel
+    c_sw1, c_sw2, c_sw3 = st.columns([1.2, 2.6, 1.2])
+    with c_sw1:
+        if st.button("◀ Ant.", key="prev_metal_card"):
+            st.session_state.card_idx = (st.session_state.card_idx - 1) % len(bancos_records)
+            st.rerun()
+    with c_sw2:
+        st.markdown(f'<div style="text-align:center;font-size:0.66rem;color:#71717a;padding-top:6px;">Cartão {st.session_state.card_idx + 1} de {len(bancos_records)} • {b_nome}</div>', unsafe_allow_html=True)
+    with c_sw3:
+        if st.button("Próx. ▶", key="next_metal_card"):
+            st.session_state.card_idx = (st.session_state.card_idx + 1) % len(bancos_records)
+            st.rerun()
+
+# ================= MAIN BALANCE (SALDO PRINCIPAL + PÍLULA VERDE) =================
+sinal_rf = "+" if renda_futura_livre >= 0 else "-"
+pill_cls = "pct-pill" if renda_futura_livre >= 0 else "pct-pill neg"
+seta_rf = "↗" if renda_futura_livre >= 0 else "↘"
+
+st.markdown(f"""
+<div style="margin-top: 6px;">
+    <div class="main-bal-lbl">Main balance • Patrimônio em Conta</div>
+    <div class="main-bal-row">
+        <span class="main-bal-val">R$ {total_saldos:,.2f}</span>
+        <span class="{pill_cls}">{seta_rf} {sinal_rf}R$ {abs(renda_futura_livre):,.2f} livre</span>
+    </div>
+    <div class="sub-bal-row">
+        Noção c/ futuro: <strong style="color:#e4e4e7;">R$ {projecao_com_futuro:,.2f}</strong> · Faturas: <strong style="color:#fb7185;">R$ {total_faturas:,.2f}</strong> · Cheque Esp.: <strong style="color:#fbbf24;">R$ {total_cheque:,.2f}</strong>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ================= QUICK ACTIONS (4 PÍLULAS HORIZONTAIS) =================
+st.markdown('<div class="qa-title">Quick Actions</div>', unsafe_allow_html=True)
+st.markdown('<div class="qa-row">', unsafe_allow_html=True)
+qa1, qa2, qa3, qa4 = st.columns(4)
+with qa1:
+    if st.button("✈️ Ciclo", key="qa_ciclo", type="primary" if st.session_state.qa_subpanel == "ciclo" else "secondary"):
+        st.session_state.qa_subpanel = None if st.session_state.qa_subpanel == "ciclo" else "ciclo"
+        st.session_state.recolher_lanc_ciclo = True
+        st.session_state.mostrar_form_prev = False
+        st.rerun()
+with qa2:
+    if st.button("💳 Pagar", key="qa_pagar", type="primary" if st.session_state.qa_subpanel == "pagar" else "secondary"):
+        st.session_state.qa_subpanel = None if st.session_state.qa_subpanel == "pagar" else "pagar"
+        st.rerun()
+with qa3:
+    if st.button("⛽ Rateio", key="qa_rateio", type="primary" if st.session_state.qa_subpanel == "rateio" else "secondary"):
+        st.session_state.qa_subpanel = None if st.session_state.qa_subpanel == "rateio" else "rateio"
+        st.session_state.mostrar_form_rateio = False
+        st.session_state.recolher_dest_reemb = True
+        st.rerun()
+with qa4:
+    if st.button("💠 Lançar", key="qa_lancar", type="primary" if st.session_state.qa_subpanel == "lancar" else "secondary"):
+        st.session_state.qa_subpanel = None if st.session_state.qa_subpanel == "lancar" else "lancar"
+        st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ================= PAINEL EXPANSÍVEL DAS QUICK ACTIONS =================
+if st.session_state.qa_subpanel == "pagar":
+    st.markdown('<div class="alloc-cal-box" style="margin-top:8px;">', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:0.82rem;font-weight:700;color:#38bdf8;margin-bottom:8px;">💳 Pagar Fatura de Cartão</div>', unsafe_allow_html=True)
+    b_cartoes = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
+    if not b_cartoes:
+        st.info("Nenhum cartão ativo.")
+    else:
+        c_pf1, c_pf2 = st.columns(2)
+        with c_pf1:
+            sel_card_p = st.selectbox("Cartão", b_cartoes, key="qa_sel_card")
+            fat_atual_sel = float(df_bancos[df_bancos["banco"] == sel_card_p].iloc[0]["fatura_atual"])
+            val_pag_f = st.number_input("Valor (R$)", min_value=0.01, value=max(0.01, fat_atual_sel), step=10.0, key="qa_val_fat")
+        with c_pf2:
+            sel_src_p = st.selectbox("Debitar da Conta", df_bancos["banco"].tolist(), key="qa_sel_src")
+            st.caption(f"Fatura atual: **R$ {fat_atual_sel:,.2f}**")
+        if st.button("Confirmar Pagamento de Fatura", key="btn_qa_confirm_fat", type="primary"):
+            pagar_fatura_cartao(sel_card_p, sel_src_p, val_pag_f)
+            st.session_state.qa_subpanel = None
+            st.success("Fatura abatida!")
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+elif st.session_state.qa_subpanel == "lancar":
+    st.markdown('<div class="alloc-cal-box" style="margin-top:8px;">', unsafe_allow_html=True)
+    modo_l = st.radio("Modo", ["Manual", "Importar .OFX"], horizontal=True, key="qa_modo_l")
+    if modo_l == "Manual":
+        with st.form("qa_form_manual"):
+            c1, c2 = st.columns(2)
+            with c1:
+                desc = st.text_input("Descrição", value="Compra / Pix")
+                val = st.number_input("Valor (R$)", value=25.00, min_value=0.01, step=1.0)
+                banco = st.selectbox("Banco", df_bancos["banco"].tolist())
+            with c2:
+                meio = st.selectbox("Método", ["Cartão de Crédito", "Conta Corrente / Pix"])
+                cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Saúde", "Outros"])
+                tipo = st.selectbox("Tipo", ["Saída", "Entrada"])
+            if st.form_submit_button("Confirmar Lançamento"):
+                adicionar_transacao(datetime.now().strftime("%d/%m %H:%M"), desc, val, cat, banco, meio, tipo)
+                st.session_state.qa_subpanel = None
+                st.success("Registrado!")
                 st.rerun()
-        with c_next_m:
-            if st.button("▶", key="m_prox", help="Próximo Ciclo"):
-                if st.session_state.cal_mes == 12:
-                    st.session_state.cal_mes = 1
-                    st.session_state.cal_ano += 1
-                else:
-                    st.session_state.cal_mes += 1
+    else:
+        tipo_ofx = st.selectbox("Tipo OFX", ["💳 Fatura de Cartão de Crédito", "🏦 Extrato de Conta Corrente"], key="qa_t_ofx")
+        b_ofx = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist() if "Cartão" in tipo_ofx else df_bancos["banco"].tolist()
+        banco_alvo = st.selectbox("Banco", b_ofx or df_bancos["banco"].tolist(), key="qa_b_ofx")
+        arq_ofx = st.file_uploader("Arquivo .OFX", type=["ofx"], key="qa_up_ofx")
+        if arq_ofx is not None:
+            raw_b = arq_ofx.read()
+            try: txt_ofx = raw_b.decode("utf-8")
+            except: txt_ofx = raw_b.decode("latin-1", errors="replace")
+            trns_ofx, sal_led = parse_ofx_content(txt_ofx)
+            if trns_ofx:
+                tot_deb = sum(abs(t["valor"]) for t in trns_ofx if t["valor"] < 0)
+                tot_cred = sum(t["valor"] for t in trns_ofx if t["valor"] > 0)
+                st.caption(f"{len(trns_ofx)} itens · Débitos: R$ {tot_deb:,.2f} · Créditos: R$ {tot_cred:,.2f}")
+                if st.button("Processar OFX", key="qa_btn_ofx", type="primary"):
+                    conn = sqlite3.connect("financas.db")
+                    c = conn.cursor()
+                    if "Cartão" in tipo_ofx:
+                        v_fat = abs(sal_led) if (sal_led is not None and sal_led != 0) else tot_deb
+                        c.execute("SELECT limite_cartao FROM contas_bancarias WHERE banco = ?", (banco_alvo,))
+                        r_b = c.fetchone()
+                        lim_t = r_b[0] if r_b else 0.0
+                        c.execute("UPDATE contas_bancarias SET fatura_atual = ?, limite_liberado = ? WHERE banco = ?", (v_fat, max(0.0, lim_t - v_fat), banco_alvo))
+                        for tr in trns_ofx:
+                            fid = tr.get("fitid", "")
+                            c.execute("SELECT COUNT(*) FROM transacoes WHERE fitid = ? AND banco = ? AND meio = 'Cartão de Crédito'", (fid, banco_alvo))
+                            if c.fetchone()[0] == 0:
+                                c.execute("INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo, fitid) VALUES (?, ?, ?, 'OFX / Cartão', ?, 'Cartão de Crédito', ?, ?)", (tr["data"], tr["descricao"], abs(tr["valor"]), banco_alvo, "Saída" if tr["valor"] < 0 else "Entrada", fid))
+                    else:
+                        v_sal = sal_led if sal_led is not None else (tot_cred - tot_deb)
+                        c.execute("UPDATE contas_bancarias SET saldo_conta = ? WHERE banco = ?", (v_sal, banco_alvo))
+                        for tr in trns_ofx:
+                            fid = tr.get("fitid", "")
+                            c.execute("SELECT COUNT(*) FROM transacoes WHERE fitid = ? AND banco = ? AND meio = 'Conta Corrente / Pix'", (fid, banco_alvo))
+                            if c.fetchone()[0] == 0:
+                                c.execute("INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo, fitid) VALUES (?, ?, ?, 'OFX / Conta', ?, 'Conta Corrente / Pix', ?, ?)", (tr["data"], tr["descricao"], abs(tr["valor"]), banco_alvo, "Saída" if tr["valor"] < 0 else "Entrada", fid))
+                    conn.commit()
+                    conn.close()
+                    st.session_state.qa_subpanel = None
+                    st.success("OFX importado!")
+                    st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ================= HELPER DO CALENDÁRIO DE ALOCAÇÕES + SIMULADOR =================
+def render_allocation_calendar_widget():
+    meses_aloc_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    nome_m_aloc = meses_aloc_nomes[st.session_state.aloc_cal_mes - 1]
+
+    st.markdown('<div class="alloc-cal-box">', unsafe_allow_html=True)
+    ca1, ca2, ca3 = st.columns([3.6, 1.2, 1.2])
+    with ca1:
+        st.markdown(f'<div style="font-size:0.84rem;font-weight:700;color:#ffffff;padding-top:4px;">Allocation Calendar • {nome_m_aloc}/{st.session_state.aloc_cal_ano}</div>', unsafe_allow_html=True)
+    with ca2:
+        if st.button("◀", key="aloc_m_ant"):
+            if st.session_state.aloc_cal_mes == 1:
+                st.session_state.aloc_cal_mes = 12
+                st.session_state.aloc_cal_ano -= 1
+            else:
+                st.session_state.aloc_cal_mes -= 1
+            st.rerun()
+    with ca3:
+        if st.button("▶", key="aloc_m_prox"):
+            if st.session_state.aloc_cal_mes == 12:
+                st.session_state.aloc_cal_mes = 1
+                st.session_state.aloc_cal_ano += 1
+            else:
+                st.session_state.aloc_cal_mes += 1
+            st.rerun()
+
+    cp1, cp2, cp3 = st.columns(3)
+    with cp1:
+        val_diaria_aloc = st.number_input("Diária (R$)", min_value=0.0, value=float(st.session_state.inp_diaria_aloc), step=1.0, key="inp_diaria_aloc")
+    with cp2:
+        val_gas_aloc = st.number_input("Gasolina/dia", min_value=0.0, value=float(st.session_state.inp_gas_aloc), step=1.0, key="inp_gas_aloc")
+    with cp3:
+        val_ped_aloc = st.number_input("Pedágio/dia", min_value=0.0, value=float(st.session_state.inp_ped_aloc), step=1.0, key="inp_ped_aloc")
+
+    datas_marcadas_set = set(df_aloc["data_alocacao"].tolist()) if not df_aloc.empty else set()
+    cal_matrix = calendar.monthcalendar(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)
+    dias_hdr = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    hdr_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:6px 0 4px 0;">'
+    for dh in dias_hdr:
+        hdr_html += f'<div style="text-align:center;font-size:0.62rem;font-weight:600;color:#71717a;">{dh}</div>'
+    hdr_html += '</div>'
+    st.markdown(hdr_html, unsafe_allow_html=True)
+
+    for sem_idx, semana in enumerate(cal_matrix):
+        cols_w = st.columns(7)
+        for d_idx, dia_num in enumerate(semana):
+            if dia_num == 0:
+                cols_w[d_idx].markdown("<div style='height:32px;background:rgba(255,255,255,0.02);border-radius:8px;'></div>", unsafe_allow_html=True)
+            else:
+                dt_cell = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, dia_num)
+                dt_cell_str = dt_cell.strftime("%Y-%m-%d")
+                is_marked = (dt_cell_str in datas_marcadas_set)
+                lbl_btn = f"•{dia_num}" if is_marked else f"{dia_num}"
+                if cols_w[d_idx].button(
+                    lbl_btn,
+                    key=f"cal_aloc_btn_{dt_cell_str}",
+                    type="primary" if is_marked else "secondary",
+                    help=f"{'Remover' if is_marked else 'Marcar'} {dt_cell.strftime('%d/%m/%Y')}"
+                ):
+                    toggle_alocacao_dia(dt_cell_str, "Alocação Cliente", val_diaria_aloc, val_gas_aloc, val_ped_aloc)
+                    st.rerun()
+
+    ca_act1, ca_act2 = st.columns(2)
+    with ca_act1:
+        if st.button("⚡ Dias Úteis (Seg–Sex)", key="btn_marcar_uteis_aloc"):
+            uteis = []
+            cur_d = dt_m_ini
+            while cur_d <= dt_m_fim:
+                if cur_d.weekday() < 5:
+                    uteis.append(cur_d.strftime("%Y-%m-%d"))
+                cur_d += timedelta(days=1)
+            definir_dias_uteis_alocacao(uteis, "Alocação Cliente", val_diaria_aloc, val_gas_aloc, val_ped_aloc)
+            st.rerun()
+    with ca_act2:
+        st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+        if st.button("🗑️ Limpar Mês", key="btn_limpar_mes_aloc"):
+            limpar_alocacoes_periodo(dt_m_ini.strftime("%Y-%m-%d"), dt_m_fim.strftime("%Y-%m-%d"))
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div style="background:#111115;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px;margin-top:8px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.68rem;">
+            <div><span style="color:#71717a;">⛽ Gasolina ({qtd_dias_aloc}d):</span> <strong style="color:#fb7185;">R$ {tot_gas_mes:,.2f}</strong></div>
+            <div><span style="color:#71717a;">🛣️ Pedágios:</span> <strong style="color:#fbbf24;">R$ {tot_ped_mes:,.2f}</strong></div>
+            <div><span style="color:#71717a;">💰 Lucro Livre:</span> <strong style="color:#34d399;">R$ {tot_lucro_liq_aloc:,.2f}</strong></div>
+            <div><span style="color:#71717a;">📥 Reembolso:</span> <strong style="color:#38bdf8;">R$ {tot_reembolso_esperado:,.2f}</strong></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if qtd_dias_aloc > 0:
+        if st.button(f"🎯 Jogar R$ {tot_reembolso_esperado:,.2f} no Rateio", key="btn_enviar_aloc_rateio"):
+            st.session_state["reemb_total_val"] = round(tot_reembolso_esperado, 2)
+            st.session_state["qtd_destinos"] = 3
+            st.session_state["v_A"] = round(tot_ped_mes, 2)
+            st.session_state["v_B"] = round(tot_gas_mes, 2)
+            st.session_state["v_C"] = round(max(0.0, tot_reembolso_esperado - tot_ped_mes - tot_gas_mes), 2)
+            st.session_state.mostrar_form_rateio = True
+            st.session_state.qa_subpanel = "rateio"
+            st.rerun()
+
+    # Calculadora Rápida vinculada aos valores do Calendário
+    ref_diaria_cal = float(st.session_state.get("inp_diaria_aloc", 128.78))
+    ref_gas_cal = float(st.session_state.get("inp_gas_aloc", 30.00))
+    ref_ped_cal = float(st.session_state.get("inp_ped_aloc", 25.60))
+    dias_default_calc = qtd_dias_aloc if qtd_dias_aloc > 0 else 5
+
+    btn_calc_lbl = (
+        "➖ Ocultar Calculadora Rápida"
+        if st.session_state.mostrar_calc_km
+        else f"🧮 Calculadora Rápida (R$ {ref_diaria_cal:,.2f} + R$ {ref_ped_cal:,.2f})"
+    )
+    if st.button(btn_calc_lbl, key="toggle_calc_km"):
+        st.session_state.mostrar_calc_km = not st.session_state.mostrar_calc_km
+        st.rerun()
+
+    if st.session_state.mostrar_calc_km:
+        st.markdown('<div style="background:#111115;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px;margin-top:6px;">', unsafe_allow_html=True)
+        c_c1, c_c2 = st.columns(2)
+        with c_c1:
+            dias_est = st.number_input("Dias", min_value=1, value=dias_default_calc, step=1, key="calc_dias_est")
+            diaria_bruta_unit = st.number_input("Diária (R$)", min_value=0.0, value=ref_diaria_cal, step=1.0, key=f"calc_diaria_{ref_diaria_cal:.2f}")
+            gasolina_unit = st.number_input("Gasolina/dia", min_value=0.0, value=ref_gas_cal, step=1.0, key=f"calc_gas_{ref_gas_cal:.2f}")
+            pedagio_dia = st.number_input("Pedágio/dia", min_value=0.0, value=ref_ped_cal, step=1.0, key=f"calc_ped_{ref_ped_cal:.2f}")
+        with c_c2:
+            lucro_unit = diaria_bruta_unit - gasolina_unit
+            gasolina_est = dias_est * gasolina_unit
+            diarias_lucro = dias_est * lucro_unit
+            pedagio_total_est = dias_est * pedagio_dia
+            total_est = (dias_est * diaria_bruta_unit) + pedagio_total_est
+            st.caption(f"⛽ Gasolina: **R$ {gasolina_est:,.2f}**")
+            st.caption(f"💰 Lucro Livre: **R$ {diarias_lucro:,.2f}**")
+            st.caption(f"🛣️ Pedágios: **R$ {pedagio_total_est:,.2f}**")
+            st.markdown(f"**Total:** <span style='color:#34d399;font-weight:800;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ================= HELPER DO RATEIO DE REEMBOLSO =================
+def render_rateio_reembolso_box():
+    st.markdown('<div class="alloc-cal-box" style="margin-top:8px;">', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:0.84rem;font-weight:700;color:#c084fc;margin-bottom:8px;">⛽ Destinar Reembolso KM</div>', unsafe_allow_html=True)
+
+    btn_r_lbl = "➖ Ocultar Formulário de Rateio" if st.session_state.mostrar_form_rateio else "🎯 Lançar / Destinar Reembolso (Rateio)"
+    if st.button(btn_r_lbl, key="toggle_form_rateio"):
+        st.session_state.mostrar_form_rateio = not st.session_state.mostrar_form_rateio
+        st.rerun()
+
+    if st.session_state.mostrar_form_rateio:
+        if "qtd_destinos" not in st.session_state: st.session_state.qtd_destinos = 2
+        if "reemb_total_val" not in st.session_state: st.session_state["reemb_total_val"] = 617.00
+        if "v_A" not in st.session_state: st.session_state["v_A"] = 150.00
+        if "v_B" not in st.session_state: st.session_state["v_B"] = round(max(0.0, st.session_state["reemb_total_val"] - st.session_state["v_A"]), 2)
+        for l_i in ["C", "D", "E"]:
+            if f"v_{l_i}" not in st.session_state: st.session_state[f"v_{l_i}"] = 0.0
+
+        def recalc_dest():
+            qtd = st.session_state.get("qtd_destinos", 2)
+            tot = float(st.session_state.get("reemb_total_val", 0.0))
+            lets = ["A", "B", "C", "D", "E"]
+            if qtd == 1: st.session_state["v_A"] = round(tot, 2)
+            else:
+                s_ant = sum(float(st.session_state.get(f"v_{lets[i]}", 0.0)) for i in range(qtd - 1))
+                st.session_state[f"v_{lets[qtd-1]}"] = round(max(0.0, tot - s_ant), 2)
+
+        c1, c2 = st.columns(2)
+        with c1: data_receb = st.date_input("Data Recebimento", value=date.today(), key="reemb_data_input")
+        with c2: val_tot_r = st.number_input("Valor Total (R$)", min_value=0.01, step=10.0, key="reemb_total_val", on_change=recalc_dest)
+
+        qtd_esc = st.selectbox("Quantos destinos ratear?", [1, 2, 3, 4, 5], index=[1, 2, 3, 4, 5].index(st.session_state.qtd_destinos), key="sel_qtd_destinos_widget")
+        if qtd_esc != st.session_state.qtd_destinos:
+            st.session_state.qtd_destinos = qtd_esc
+            recalc_dest()
+            st.rerun()
+
+        dests = []
+        b_list = df_bancos["banco"].tolist()
+        lets = ["A", "B", "C", "D", "E"]
+        mots = ["Pedágio no Cartão de Crédito", "Gasolina no Cheque Especial", "Renda livre / Lucro das diárias", "Outro gasto / Ajuste", "Reserva / Poupança"]
+        for i in range(st.session_state.qtd_destinos):
+            lt = lets[i]
+            is_ult = (i == st.session_state.qtd_destinos - 1)
+            cd1, cd2 = st.columns(2)
+            with cd1: bd = st.selectbox(f"Banco ({lt})", b_list, index=min(i, len(b_list)-1), key=f"b_{lt}")
+            with cd2: vd = st.number_input(f"Valor ({lt})", min_value=0.0, step=10.0, key=f"v_{lt}", on_change=(recalc_dest if not is_ult else None))
+            ad = st.selectbox(f"Ação ({lt})", ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], index=min(i, 2), key=f"ac_{lt}")
+            md = st.text_input(f"Motivo ({lt})", value=mots[i], key=f"m_{lt}")
+            dests.append({"banco": bd, "acao": ad, "valor": vd, "motivo": md})
+
+        if st.button("🚀 Executar Rateio", key="btn_executar_rateio_dinamico", type="primary"):
+            ativos = [d for d in dests if d["valor"] > 0]
+            if ativos:
+                aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), val_tot_r, ativos, efetivar_agora=(data_receb <= date.today()))
+                st.session_state.mostrar_form_rateio = False
+                st.success("Rateio executado!")
                 st.rerun()
 
-    # Mapeia eventos por data completa (date object) dentro do ciclo completo (04/MM a 03/MM+1)
+    df_itens_hist = get_reembolsos_itens()
+    if not df_itens_hist.empty:
+        cda1, cda2 = st.columns([3.5, 1.5])
+        with cda1: st.markdown(f'<div style="font-size:0.74rem;font-weight:700;color:#a1a1aa;margin-top:8px;">Destinações Ativas ({len(df_itens_hist)})</div>', unsafe_allow_html=True)
+        with cda2:
+            if st.button("👁️ Mostrar" if st.session_state.recolher_dest_reemb else "🔼 Recolher", key="btn_toggle_rec_da"):
+                st.session_state.recolher_dest_reemb = not st.session_state.recolher_dest_reemb
+                st.rerun()
+        if st.session_state.recolher_dest_reemb:
+            st.caption(f"Lista recolhida ({len(df_itens_hist)} itens).")
+        else:
+            for _, item in df_itens_hist.iterrows():
+                st_it = item.get("status", "Efetivado")
+                cor_it = "#fbbf24" if st_it == "Previsto" else "#34d399"
+                ci, cb = st.columns([4.2, 1.3])
+                with ci:
+                    st.markdown(f'<div class="oled-list-item"><div><strong style="font-size:0.76rem;">{item["banco"]}</strong> · <span style="font-size:0.72rem;color:#a1a1aa;">{item["motivo"]}</span><br><span style="font-size:0.62rem;color:#71717a;">{item["data"]} · {item["acao"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{cor_it};font-size:0.80rem;">R$ {item["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+                with cb:
+                    st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+                    if st.button("↩️", key=f"btn_est_{item['id']}", help="Estornar"):
+                        estornar_item_destino(item["id"])
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ================= HELPER DO CICLO & PREVISÕES =================
+def render_ciclo_previsoes_box():
+    st.markdown('<div class="alloc-cal-box" style="margin-top:8px;">', unsafe_allow_html=True)
+    c_n1, c_n2, c_n3 = st.columns([3.6, 1.2, 1.2])
+    with c_n1:
+        st.markdown(f'<div style="font-size:0.84rem;font-weight:700;color:#38bdf8;padding-top:4px;">📅 Ciclo {nome_mes_comp}/{st.session_state.cal_ano}</div>', unsafe_allow_html=True)
+    with c_n2:
+        if st.button("◀", key="m_ant"):
+            st.session_state.cal_mes = 12 if st.session_state.cal_mes == 1 else st.session_state.cal_mes - 1
+            if st.session_state.cal_mes == 12: st.session_state.cal_ano -= 1
+            st.rerun()
+    with c_n3:
+        if st.button("▶", key="m_prox"):
+            st.session_state.cal_mes = 1 if st.session_state.cal_mes == 12 else st.session_state.cal_mes + 1
+            if st.session_state.cal_mes == 1: st.session_state.cal_ano += 1
+            st.rerun()
+
+    opcoes_ciclo = ["Ciclo Completo (04 a 03)", "1ª Parte (Dia 04 a 15)", "2ª Parte (Dia 16 a 03)"]
+    modo_sel = st.selectbox("Período", opcoes_ciclo, index=opcoes_ciclo.index(st.session_state.modo_ciclo), key="sel_modo_ciclo_prev")
+    if modo_sel != st.session_state.modo_ciclo:
+        st.session_state.modo_ciclo = modo_sel
+        st.rerun()
+
+    dt_ciclo_ini, dt_ciclo_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, st.session_state.modo_ciclo)
+    dt_full_ini, dt_full_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
+
+    df_prev_c = df_prev[df_prev["data_prevista"].apply(lambda d: dt_ciclo_ini <= datetime.strptime(d, "%Y-%m-%d").date() <= dt_ciclo_fim)] if not df_prev.empty else pd.DataFrame()
+    df_reemb_c = df_reemb_itens[df_reemb_itens["data"].apply(lambda d: dt_ciclo_ini <= datetime.strptime(d, "%Y-%m-%d").date() <= dt_ciclo_fim)] if not df_reemb_itens.empty else pd.DataFrame()
+
+    ent_b = float(df_prev_c[df_prev_c["tipo"] == "Entrada"]["valor"].sum()) if not df_prev_c.empty else 0.0
+    sai_b = float(df_prev_c[df_prev_c["tipo"] == "Saída"]["valor"].sum()) if not df_prev_c.empty else 0.0
+    reemb_t = float(df_reemb_c["valor"].sum()) if not df_reemb_c.empty else 0.0
+    reemb_cp = float(df_reemb_c[df_reemb_c["acao"] != "Creditar em Conta Corrente"]["valor"].sum()) if not df_reemb_c.empty else 0.0
+
+    ent_tot = ent_b + reemb_t
+    sai_tot = sai_b + reemb_cp
+    proj_f = total_saldos + ent_tot - sai_tot
+
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0;font-size:0.70rem;">
+        <div style="background:#111115;padding:7px 9px;border-radius:10px;"><span style="color:#71717a;">A Receber:</span> <strong style="color:#34d399;">+R$ {ent_tot:,.2f}</strong></div>
+        <div style="background:#111115;padding:7px 9px;border-radius:10px;"><span style="color:#71717a;">Saídas+Dest.:</span> <strong style="color:#fb7185;">-R$ {sai_tot:,.2f}</strong></div>
+        <div style="background:#111115;padding:7px 9px;border-radius:10px;"><span style="color:#71717a;">Atual:</span> <strong>R$ {total_saldos:,.2f}</strong></div>
+        <div style="background:#111115;padding:7px 9px;border-radius:10px;"><span style="color:#71717a;">Projetado:</span> <strong style="color:{'#34d399' if proj_f >= 0 else '#fb7185'};">R$ {proj_f:,.2f}</strong></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Tabela visual do ciclo 04 a 03
     eventos_por_data = {}
     if not df_prev.empty:
         for _, row in df_prev.iterrows():
@@ -1575,2029 +1913,365 @@ if st.session_state.bloco_ativo == "previstos":
                     eventos_por_data.setdefault(dt_obj, []).append(ev_dict)
             except:
                 pass
-
     if not df_reemb_itens.empty:
-        # Agrupa o total de reembolso que entra em cada data (para mostrar a entrada real + o destino que sai)
-        reemb_por_data_rows = {}
-        for _, row_r in df_reemb_itens.iterrows():
+        reemb_rows = {}
+        for _, r_r in df_reemb_itens.iterrows():
             try:
-                dt_r = datetime.strptime(row_r["data"], "%Y-%m-%d").date()
+                dt_r = datetime.strptime(r_r["data"], "%Y-%m-%d").date()
                 if dt_full_ini <= dt_r <= dt_full_fim:
-                    reemb_por_data_rows.setdefault(dt_r, []).append(row_r)
+                    reemb_rows.setdefault(dt_r, []).append(r_r)
             except:
                 pass
-
-        for dt_r, lista_r in reemb_por_data_rows.items():
-            # 1) Registra a entrada do reembolso naquela data:
-            #    - Se houver parte destinada a pagamento, mostra a entrada que cobriu os destinos em verde (`+soma_destinada`)
-            #    - Cada item sem destinação (Conta Corrente) entra em amarelo (`+valor`)
-            soma_destinada_dia = sum(float(x["valor"]) for x in lista_r if x["acao"] != "Creditar em Conta Corrente")
-            if soma_destinada_dia > 0:
+        for dt_r, l_r in reemb_rows.items():
+            s_dest = sum(float(x["valor"]) for x in l_r if x["acao"] != "Creditar em Conta Corrente")
+            if s_dest > 0:
+                eventos_por_data.setdefault(dt_r, []).append({"valor": s_dest, "papel_cal": "EntradaCobertura"})
+            for r_it in l_r:
                 eventos_por_data.setdefault(dt_r, []).append({
-                    "descricao": "⛽ Entrada Reembolso (Para Destinos)",
-                    "valor": soma_destinada_dia,
-                    "tipo": "Entrada",
-                    "papel_cal": "EntradaCobertura",
-                    "banco": "Reembolso",
-                    "is_reembolso": True
+                    "valor": r_it["valor"],
+                    "papel_cal": "ReembSemDestino" if r_it["acao"] == "Creditar em Conta Corrente" else "SaidaComprometida"
                 })
-            for r_item in lista_r:
-                if r_item["acao"] == "Creditar em Conta Corrente":
-                    # Entrada sem destinação de pagamento -> linha amarela
-                    eventos_por_data.setdefault(dt_r, []).append({
-                        "descricao": f"⛽ Reembolso s/ Destinação: {r_item['motivo']}",
-                        "valor": r_item["valor"],
-                        "tipo": "Entrada",
-                        "papel_cal": "ReembSemDestino",
-                        "banco": r_item["banco"],
-                        "is_reembolso": True
-                    })
-                else:
-                    # Saída destinada (Cartão / Cheque Especial) -> linha vermelha
-                    eventos_por_data.setdefault(dt_r, []).append({
-                        "descricao": f"🎯 Destino: {r_item['motivo']}",
-                        "valor": r_item["valor"],
-                        "tipo": "Saída",
-                        "papel_cal": "SaidaComprometida",
-                        "banco": r_item["banco"],
-                        "is_reembolso": True
-                    })
 
-    # Constrói as semanas de 04/MM até 03/MM+1
     start_grid = dt_full_ini - timedelta(days=dt_full_ini.weekday())
     end_grid = dt_full_fim + timedelta(days=(6 - dt_full_fim.weekday()))
-    dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-
-    html_cal = '<table class="cal-table"><thead><tr>'
-    for d_sem in dias_semana:
-        html_cal += f'<th class="cal-th">{d_sem}</th>'
-    html_cal += '</tr></thead><tbody>'
-
+    html_cal = '<table class="cal-table"><thead><tr>' + ''.join(f'<th class="cal-th">{d}</th>' for d in ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]) + '</tr></thead><tbody>'
     cur_dt = start_grid
     while cur_dt <= end_grid:
         html_cal += '<tr>'
         for _ in range(7):
-            in_cycle = (dt_full_ini <= cur_dt <= dt_full_fim)
-            if not in_cycle:
-                html_cal += f'<td class="cal-cell" style="opacity: 0.25;"><span style="color: #64748b; font-size: 0.58rem;">{cur_dt.day:02d}/{cur_dt.month:02d}</span></td>'
+            if not (dt_full_ini <= cur_dt <= dt_full_fim):
+                html_cal += f'<td class="cal-cell" style="opacity:0.2;"><span style="color:#71717a;">{cur_dt.day:02d}/{cur_dt.month:02d}</span></td>'
             else:
-                is_today = (cur_dt == hoje)
-                is_payday = (cur_dt.day in [3, 16])
-                classes = ["cal-cell"]
-                if is_today:
-                    classes.append("today")
-                if is_payday:
-                    classes.append("payday")
-
-                badges_html = ""
+                cls = ["cal-cell"]
+                if cur_dt == hoje: cls.append("today")
+                if cur_dt.day in [3, 16]: cls.append("payday")
+                bdg = ""
                 if cur_dt in eventos_por_data:
                     evs = eventos_por_data[cur_dt]
-                    tem_in_livre = any(ev["papel_cal"] == "EntradaLivre" for ev in evs)
-                    tem_reemb_amarelo = any(ev["papel_cal"] == "ReembSemDestino" for ev in evs)
-                    tem_out_comp = any(ev["papel_cal"] == "SaidaComprometida" for ev in evs)
-
-                    if (tem_in_livre or tem_reemb_amarelo) and tem_out_comp:
-                        classes.append("has-ambos")
-                    elif tem_out_comp:
-                        # Se entrou reembolso e já saiu 100% destinado (ex: dia 18), marca o card em vermelho!
-                        classes.append("has-saida")
-                    elif tem_reemb_amarelo and not tem_in_livre:
-                        classes.append("has-reemb-livre")
-                    elif tem_in_livre:
-                        classes.append("has-entrada")
-
+                    ti = any(e["papel_cal"] == "EntradaLivre" for e in evs)
+                    ta = any(e["papel_cal"] == "ReembSemDestino" for e in evs)
+                    to = any(e["papel_cal"] == "SaidaComprometida" for e in evs)
+                    if (ti or ta) and to: cls.append("has-ambos")
+                    elif to: cls.append("has-saida")
+                    elif ta: cls.append("has-reemb-livre")
+                    elif ti: cls.append("has-entrada")
                     for ev in evs:
-                        papel = ev["papel_cal"]
-                        if papel == "SaidaComprometida":
-                            cls_b = "badge-out"
-                            sinal_b = "-"
-                        elif papel == "ReembSemDestino":
-                            cls_b = "badge-reemb-livre"
-                            sinal_b = "+"
-                        else:
-                            cls_b = "badge-in"
-                            sinal_b = "+"
-                        v_curto = f"{sinal_b}{ev['valor']:,.0f}".replace(",", ".")
-                        badges_html += f'<span class="cal-badge {cls_b}">{v_curto}</span>'
-
-                cls_str = " ".join(classes)
-                cor_num = "#eab308" if is_payday else ("#38bdf8" if is_today else "#94a3b8")
-                lbl_dia = f"{cur_dt.day:02d}/{cur_dt.month:02d}" if cur_dt.month != st.session_state.cal_mes else f"{cur_dt.day}"
-                tag_dia = f"💰{lbl_dia}" if is_payday else lbl_dia
-                html_cal += f'<td class="{cls_str}"><span style="color: {cor_num};">{tag_dia}</span>{badges_html}</td>'
+                        p = ev["papel_cal"]
+                        cb = "badge-out" if p == "SaidaComprometida" else ("badge-reemb-livre" if p == "ReembSemDestino" else "badge-in")
+                        sb = "-" if p == "SaidaComprometida" else "+"
+                        bdg += f'<span class="cal-badge {cb}">{sb}{ev["valor"]:,.0f}</span>'
+                ld = f"{cur_dt.day:02d}/{cur_dt.month:02d}" if cur_dt.month != st.session_state.cal_mes else f"{cur_dt.day}"
+                cn = "#eab308" if cur_dt.day in [3, 16] else ("#38bdf8" if cur_dt == hoje else "#a1a1aa")
+                html_cal += f'<td class="{" ".join(cls)}"><span style="color:{cn};">{ld}</span>{bdg}</td>'
             cur_dt += timedelta(days=1)
         html_cal += '</tr>'
     html_cal += '</tbody></table>'
-
     st.markdown(html_cal, unsafe_allow_html=True)
-    st.markdown(f"""
-    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 12px 0; font-size: 0.64rem;">
-        <span style="color: #eab308;">💰 16/{st.session_state.cal_mes:02d} e {dt_salario_03.strftime('%d/%m')} (Salários)</span>
-        <span style="color: #4ade80;">🟢 Entrada</span>
-        <span style="color: #fbbf24;">🟡 Reembolso s/ Destinação</span>
-        <span style="color: #f87171;">🔴 Saída / Já Destinado</span>
-    </div>
-    """, unsafe_allow_html=True)
 
-    # MODAL DE COPIAR DESPESA
-    if st.session_state.copiando_prev is not None:
-        c_origem = st.session_state.copiando_prev
-        st.markdown("""
-        <div style="background: #101c2e; border: 1px solid #a855f7; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
-            <span style="font-size: 0.82rem; font-weight: 800; color: #a855f7;">📋 Copiar Lançamento para Outro Mês</span>
-        """, unsafe_allow_html=True)
-        with st.form("form_copiar_previsto"):
-            dt_base_copia = datetime.strptime(c_origem["data_prevista"], "%Y-%m-%d").date() + relativedelta(months=1)
-            c_cp1, c_cp2 = st.columns(2)
-            with c_cp1:
-                nova_data = st.date_input("Nova Data", value=dt_base_copia)
-                novo_val = st.number_input("Valor (R$)", min_value=0.01, value=float(c_origem["valor"]), step=10.0)
-            with c_cp2:
-                nova_desc = st.text_input("Descrição", value=c_origem["descricao"])
-                idx_banco_c = df_bancos["banco"].tolist().index(c_origem["banco"]) if c_origem["banco"] in df_bancos["banco"].tolist() else 0
-                novo_banco = st.selectbox("Banco", df_bancos["banco"].tolist(), index=idx_banco_c)
-            
-            c_salv_cp, c_canc_cp = st.columns(2)
-            with c_salv_cp:
-                if st.form_submit_button("📋 Confirmar Cópia"):
-                    adicionar_previsto(nova_data.strftime("%Y-%m-%d"), nova_desc, novo_val, c_origem["categoria"], c_origem["tipo"], novo_banco, 1, c_origem.get("fixo", 0))
-                    st.session_state.copiando_prev = None
-                    st.success("Lançamento copiado com sucesso!")
-                    st.rerun()
-            with c_canc_cp:
-                if st.form_submit_button("✕ Cancelar"):
-                    st.session_state.copiando_prev = None
-                    st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # PAINEL DE EDIÇÃO
-    if st.session_state.editando_id is not None:
-        item_edit = df_prev[df_prev["id"] == st.session_state.editando_id]
-        if not item_edit.empty:
-            row_edit = item_edit.iloc[0]
-            st.markdown("""
-            <div style="background: #101c2e; border: 1px solid #38bdf8; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
-                <span style="font-size: 0.82rem; font-weight: 800; color: #38bdf8;">✏️ Editando Lançamento</span>
-            """, unsafe_allow_html=True)
-            with st.form("form_editar_previsto"):
-                e_data_base = datetime.strptime(row_edit["data_prevista"], "%Y-%m-%d").date()
-                c_e1, c_e2 = st.columns(2)
-                with c_e1:
-                    e_data = st.date_input("Data do Lançamento", value=e_data_base)
-                    e_tipo = st.selectbox("Tipo de Operação", ["Entrada", "Saída"], index=0 if row_edit["tipo"] == "Entrada" else 1)
-                    e_valor = st.number_input("Valor (R$)", min_value=0.01, value=float(row_edit["valor"]), step=50.0)
-                with c_e2:
-                    e_desc = st.text_input("Descrição", value=row_edit["descricao"])
-                    idx_banco = df_bancos["banco"].tolist().index(row_edit["banco"]) if row_edit["banco"] in df_bancos["banco"].tolist() else 0
-                    e_banco = st.selectbox("Banco", df_bancos["banco"].tolist(), index=idx_banco)
-                    cats = ["Renda", "Salário", "Fatura", "Contas Fixas", "Lazer", "Outros"]
-                    idx_cat = cats.index(row_edit["categoria"]) if row_edit["categoria"] in cats else 0
-                    e_cat = st.selectbox("Categoria", cats, index=idx_cat)
-                
-                e_fixo = st.checkbox("Fixar este lançamento (Renda/Gasto Recorrente)", value=bool(row_edit.get("fixo", 0)))
-                
-                c_salv, c_canc = st.columns(2)
-                with c_salv:
-                    if st.form_submit_button("💾 Salvar Alterações"):
-                        atualizar_previsto(row_edit["id"], e_data.strftime("%Y-%m-%d"), e_desc, e_valor, e_cat, e_tipo, e_banco, 1 if e_fixo else 0)
-                        st.session_state.editando_id = None
-                        st.success("Lançamento atualizado!")
-                        st.rerun()
-                with c_canc:
-                    if st.form_submit_button("✕ Cancelar"):
-                        st.session_state.editando_id = None
-                        st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    # Alternar Formulário de Novo Lançamento
-    btn_txt = "➖ Ocultar Formulário" if st.session_state.mostrar_form_prev else "➕ Agendar Novo Lançamento"
-    if st.button(btn_txt, key="toggle_form_prev"):
+    # Novo Lançamento Previsto recolhível
+    if st.button("➖ Ocultar Formulário" if st.session_state.mostrar_form_prev else "➕ Agendar Lançamento no Ciclo", key="toggle_form_prev"):
         st.session_state.mostrar_form_prev = not st.session_state.mostrar_form_prev
         st.rerun()
 
     if st.session_state.mostrar_form_prev:
-        with st.form("form_add_previsto"):
-            st.markdown('<div style="font-size: 0.75rem; font-weight: 700; color: #38bdf8; margin-bottom: 8px;">Dados do Lançamento:</div>', unsafe_allow_html=True)
-            c_p1, c_p2 = st.columns(2)
-            with c_p1:
-                data_sel = st.date_input("Data de Início", value=date.today())
-                tipo_prev = st.selectbox("Tipo de Operação", ["Entrada", "Saída"])
-                valor_prev = st.number_input("Valor Estimado (R$)", min_value=0.01, value=1500.00, step=50.0)
-            with c_p2:
-                desc_prev = st.text_input("Descrição", value="Salário Dia 03 / Dia 16")
-                banco_prev = st.selectbox("Banco Envolvido", df_bancos["banco"].tolist())
-                cat_prev = st.selectbox("Categoria", ["Salário", "Renda", "Fatura", "Contas Fixas", "Lazer", "Outros"])
-            
-            st.markdown('<div style="margin-top: 6px; padding: 8px; background: #0d1522; border-radius: 10px; border: 1px solid #1a273b;">', unsafe_allow_html=True)
-            fixo_check = st.checkbox("📌 Fixar Renda/Gasto Recorrente (Mesmo dia todos os meses)", value=True)
-            meses_qtd = st.slider("Repetir por quantos meses consecutivos?", min_value=1, max_value=12, value=1)
-            st.markdown('</div>', unsafe_allow_html=True)
-                
+        with st.form("form_add_prev_oled"):
+            c1, c2 = st.columns(2)
+            with c1:
+                d_s = st.date_input("Data", value=date.today())
+                t_s = st.selectbox("Tipo", ["Entrada", "Saída"])
+                v_s = st.number_input("Valor (R$)", min_value=0.01, value=1500.00, step=50.0)
+            with c2:
+                ds_s = st.text_input("Descrição", value="Salário Dia 03 / Dia 16")
+                b_s = st.selectbox("Banco", df_bancos["banco"].tolist())
+                ct_s = st.selectbox("Categoria", ["Salário", "Renda", "Fatura", "Contas Fixas", "Lazer", "Outros"])
+            fx_s = st.checkbox("📌 Fixar recorrente", value=True)
+            mq_s = st.slider("Repetir meses", 1, 12, 1)
             if st.form_submit_button("💾 Confirmar Agendamento"):
-                adicionar_previsto(
-                    data_sel.strftime("%Y-%m-%d"), 
-                    desc_prev, 
-                    valor_prev, 
-                    cat_prev, 
-                    tipo_prev, 
-                    banco_prev, 
-                    meses_repetir=meses_qtd,
-                    fixo=1 if fixo_check else 0
-                )
+                adicionar_previsto(d_s.strftime("%Y-%m-%d"), ds_s, v_s, ct_s, t_s, b_s, mq_s, 1 if fx_s else 0)
                 st.session_state.mostrar_form_prev = False
-                st.success(f"Previsão agendada com sucesso para {meses_qtd} mês(es)!")
                 st.rerun()
 
-    # Lista de Previsões do Ciclo Ativo (com botão de Recolher para deixar a tela enxuta)
-    qtd_lanc_ciclo = len(df_prev_ciclo) + len(df_reemb_ciclo)
-    c_lc1, c_lc2 = st.columns([3.8, 1.8])
-    with c_lc1:
-        st.markdown(f'<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Lançamentos ({qtd_lanc_ciclo}) • {dt_ciclo_ini.strftime("%d/%m")} a {dt_ciclo_fim.strftime("%d/%m")}:</div>', unsafe_allow_html=True)
-    with c_lc2:
-        st.markdown('<div class="btn-action-icon" style="margin-top: 6px;">', unsafe_allow_html=True)
-        lbl_rec_lc = "👁️ Mostrar" if st.session_state.recolher_lanc_ciclo else "🔼 Recolher"
-        if st.button(lbl_rec_lc, key="btn_toggle_rec_lc"):
+    # Lista de lançamentos do ciclo recolhível
+    qtd_lc = len(df_prev_c) + len(df_reemb_c)
+    clc1, clc2 = st.columns([3.5, 1.5])
+    with clc1: st.markdown(f'<div style="font-size:0.74rem;font-weight:700;color:#a1a1aa;margin-top:8px;">Lançamentos ({qtd_lc})</div>', unsafe_allow_html=True)
+    with clc2:
+        if st.button("👁️ Mostrar" if st.session_state.recolher_lanc_ciclo else "🔼 Recolher", key="btn_toggle_rec_lc"):
             st.session_state.recolher_lanc_ciclo = not st.session_state.recolher_lanc_ciclo
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
     if st.session_state.recolher_lanc_ciclo:
-        st.caption(f"Lista recolhida ({qtd_lanc_ciclo} lançamento(s) oculto(s)). Clique em **👁️ Mostrar** para expandir.")
-    elif df_prev_ciclo.empty and df_reemb_ciclo.empty:
-        st.info("Nenhuma previsão agendada dentro deste período.")
+        st.caption(f"Lista recolhida ({qtd_lc} itens).")
     else:
-        for idx, row_p in df_prev_ciclo.iterrows():
-            is_ent = row_p["tipo"] == "Entrada"
-            sinal_p = "+" if is_ent else "-"
-            cor_p = "#4ade80" if is_ent else "#f87171"
-            tag_fixo = " • 📌 Fixa" if row_p.get("fixo", 0) == 1 else ""
-            
-            st.markdown(f"""
-            <div class="prev-item-card" style="margin-bottom: 4px;">
-                <div>
-                    <div style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">{row_p['descricao']}</div>
-                    <div style="font-size: 0.63rem; color: #94a3b8;">📅 {row_p['data_prevista']} • {row_p['banco']}{tag_fixo}</div>
-                </div>
-                <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.85rem; color: {cor_p}; text-align: right;">
-                    {sinal_p} R$ {row_p['valor']:,.2f}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            c_ef, c_cp, c_ed, c_del = st.columns([1.6, 1, 1, 1])
-            with c_ef:
-                st.markdown('<div class="btn-action-icon" style="margin-bottom: 8px;">', unsafe_allow_html=True)
-                if st.button("✅ Baixar", key=f"btn_efet_{row_p['id']}", help="Efetivar no saldo do banco e extrato"):
-                    efetivar_previsto(row_p["id"])
-                    st.success("Efetivado no banco!")
+        for _, rp in df_prev_c.iterrows():
+            is_e = rp["tipo"] == "Entrada"
+            c1, c2, c3 = st.columns([4, 1, 1])
+            with c1:
+                st.markdown(f'<div class="oled-list-item"><div><strong style="font-size:0.76rem;">{rp["descricao"]}</strong><br><span style="font-size:0.62rem;color:#71717a;">{rp["data_prevista"]} · {rp["banco"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{"#34d399" if is_e else "#fb7185"};font-size:0.80rem;">{"+" if is_e else "-"}R$ {rp["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+            with c2:
+                if st.button("✅", key=f"btn_efet_{rp['id']}", help="Baixar"):
+                    efetivar_previsto(rp["id"])
+                    st.rerun()
+            with c3:
+                st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+                if st.button("🗑️", key=f"del_p_{rp['id']}", help="Excluir"):
+                    remover_previsto(rp["id"])
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
-            with c_cp:
-                st.markdown('<div class="btn-action-icon" style="margin-bottom: 8px;">', unsafe_allow_html=True)
-                if st.button("📋", key=f"btn_cp_{row_p['id']}", help="Copiar para outro mês"):
-                    st.session_state.copiando_prev = row_p.to_dict()
-                    st.session_state.editando_id = None
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-            with c_ed:
-                st.markdown('<div class="btn-action-icon" style="margin-bottom: 8px;">', unsafe_allow_html=True)
-                if st.button("✏️", key=f"btn_edit_{row_p['id']}", help="Editar"):
-                    st.session_state.editando_id = int(row_p["id"])
-                    st.session_state.copiando_prev = None
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-            with c_del:
-                st.markdown('<div class="btn-clear" style="margin-bottom: 8px;">', unsafe_allow_html=True)
-                if st.button("🗑️", key=f"del_p_{row_p['id']}", help="Excluir"):
-                    remover_previsto(row_p["id"])
-                    if st.session_state.editando_id == int(row_p["id"]):
-                        st.session_state.editando_id = None
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        for idx_r, row_r in df_reemb_ciclo.iterrows():
-            is_r_livre = (row_r["acao"] == "Creditar em Conta Corrente")
-            cor_borda_r = "#fbbf24" if is_r_livre else "#f87171"
-            cor_val_r = "#fbbf24" if is_r_livre else "#f87171"
-            sinal_val_r = "+" if is_r_livre else "-"
-            tag_dest_r = "🟡 Sem destinação (Conta)" if is_r_livre else "🔴 Já destinado (Saída)"
-            col_info_r, col_botoes_r = st.columns([4.8, 1.2])
-            with col_info_r:
-                st.markdown(f"""
-                <div class="prev-item-card" style="margin-bottom: 6px; border-left: 3px solid {cor_borda_r};">
-                    <div>
-                        <div style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">⛽ Reembolso: {row_r['motivo']}</div>
-                        <div style="font-size: 0.63rem; color: #94a3b8;">📅 {row_r['data']} • {row_r['banco']} • {tag_dest_r}</div>
-                    </div>
-                    <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.85rem; color: {cor_val_r}; text-align: right;">
-                        {sinal_val_r} R$ {row_r['valor']:,.2f}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            with col_botoes_r:
-                st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                if st.button("↩️", key=f"del_prev_reemb_{row_r['id']}", help="Estornar esta destinação"):
-                    estornar_item_destino(row_r["id"])
-                    st.success("Reembolso estornado!")
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.bloco_ativo == "destinar_reembolso":
-    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-    c_tit, c_fech = st.columns([5, 1])
-    with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">⛽ Entrada & Destinação de Reembolso KM</span>', unsafe_allow_html=True)
-    with c_fech:
-        if st.button("✕", key="fechar_km"):
-            st.session_state.bloco_ativo = None
-            st.rerun()
-
-    st.markdown("""
-    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 10px 0 14px 0;">
-        <div style="font-size: 0.72rem; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Rateio Flexível de Reembolso:</div>
-        <div style="font-size: 0.68rem; color: #94a3b8; margin-top: 4px; line-height: 1.4;">
-            Digite o valor total recebido e <strong>escolha exatamente quantos destinos</strong> você quer (1, 2, 3 ou mais). O app só abate e lança nas contas e faturas que você definir!
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # --- CALENDÁRIO INTERATIVO DE PREVISÃO DE ALOCAÇÃO NOS CLIENTES ---
-    if "aloc_cal_mes" not in st.session_state:
-        st.session_state.aloc_cal_mes = st.session_state.cal_mes
-    if "aloc_cal_ano" not in st.session_state:
-        st.session_state.aloc_cal_ano = st.session_state.cal_ano
-    if "mostrar_cal_aloc" not in st.session_state:
-        st.session_state.mostrar_cal_aloc = True
-
-    btn_aloc_lbl = "➖ Ocultar Calendário de Alocações" if st.session_state.mostrar_cal_aloc else "🗓️ Calendário de Previsão de Alocação (Marcar Dias)"
-    if st.button(btn_aloc_lbl, key="toggle_cal_aloc"):
-        st.session_state.mostrar_cal_aloc = not st.session_state.mostrar_cal_aloc
-        st.rerun()
-
-    if st.session_state.mostrar_cal_aloc:
-        st.markdown('<div style="background: #111a28; border: 1px solid #243652; border-radius: 14px; padding: 12px; margin-bottom: 14px;">', unsafe_allow_html=True)
-        meses_aloc_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-        nome_m_aloc = meses_aloc_nomes[st.session_state.aloc_cal_mes - 1]
-
-        ca_nav1, ca_nav2, ca_nav3 = st.columns([3.2, 1.4, 1.4])
-        with ca_nav1:
-            st.markdown(f'<div style="font-size: 0.80rem; font-weight: 800; color: #38bdf8; padding-top: 6px;">🗓️ Alocações • {nome_m_aloc}/{st.session_state.aloc_cal_ano}</div>', unsafe_allow_html=True)
-        with ca_nav2:
-            if st.button("◀", key="aloc_m_ant", help="Mês anterior"):
-                if st.session_state.aloc_cal_mes == 1:
-                    st.session_state.aloc_cal_mes = 12
-                    st.session_state.aloc_cal_ano -= 1
-                else:
-                    st.session_state.aloc_cal_mes -= 1
-                st.rerun()
-        with ca_nav3:
-            if st.button("▶", key="aloc_m_prox", help="Próximo mês"):
-                if st.session_state.aloc_cal_mes == 12:
-                    st.session_state.aloc_cal_mes = 1
-                    st.session_state.aloc_cal_ano += 1
-                else:
-                    st.session_state.aloc_cal_mes += 1
-                st.rerun()
-
-        st.caption(f"Clique nos dias para marcar/desmarcar alocação (R$ {st.session_state.inp_diaria_aloc:,.2f} diária • R$ {st.session_state.inp_gas_aloc:,.2f} gasolina • R$ {st.session_state.inp_ped_aloc:,.2f} pedágio):")
-
-        # Parâmetros padrão da alocação editáveis rapidamente (sincronizados automaticamente com a Calculadora Rápida)
-        cp_a1, cp_a2, cp_a3 = st.columns(3)
-        with cp_a1:
-            val_diaria_aloc = st.number_input("Diária (R$)", min_value=0.0, step=1.0, key="inp_diaria_aloc")
-        with cp_a2:
-            val_gas_aloc = st.number_input("Gasolina/dia", min_value=0.0, step=1.0, key="inp_gas_aloc")
-        with cp_a3:
-            val_ped_aloc = st.number_input("Pedágio/dia", min_value=0.0, step=1.0, key="inp_ped_aloc")
-
-        # Datas marcadas atualmente
-        datas_marcadas_set = set(df_aloc["data_alocacao"].tolist()) if not df_aloc.empty else set()
-
-        # Grade mensal clicável (Seg a Dom) — 7 colunas fixas tanto no PC quanto no Celular
-        cal_matrix = calendar.monthcalendar(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)
-        dias_hdr = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-        hdr_html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:4px;">'
-        for dh in dias_hdr:
-            hdr_html += f'<div style="text-align:center;font-size:0.62rem;font-weight:700;color:#64748b;">{dh}</div>'
-        hdr_html += '</div>'
-        st.markdown(hdr_html, unsafe_allow_html=True)
-
-        for sem_idx, semana in enumerate(cal_matrix):
-            cols_w = st.columns(7)
-            for d_idx, dia_num in enumerate(semana):
-                if dia_num == 0:
-                    cols_w[d_idx].markdown("<div style='height:34px;background:rgba(13,21,34,0.4);border-radius:8px;'></div>", unsafe_allow_html=True)
-                else:
-                    dt_cell = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, dia_num)
-                    dt_cell_str = dt_cell.strftime("%Y-%m-%d")
-                    is_marked = (dt_cell_str in datas_marcadas_set)
-                    lbl_btn = f"🚗{dia_num}" if is_marked else f"{dia_num}"
-                    if cols_w[d_idx].button(
-                        lbl_btn,
-                        key=f"cal_aloc_btn_{dt_cell_str}",
-                        type="primary" if is_marked else "secondary",
-                        help=f"{'Remover' if is_marked else 'Marcar'} alocação em {dt_cell.strftime('%d/%m/%Y')}"
-                    ):
-                        toggle_alocacao_dia(dt_cell_str, "Alocação Cliente", val_diaria_aloc, val_gas_aloc, val_ped_aloc)
-                        st.rerun()
-
-        # Botões rápidos: Marcar Seg-Sex do mês / Limpar mês
-        dt_m_ini = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, 1)
-        last_day_m = calendar.monthrange(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)[1]
-        dt_m_fim = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, last_day_m)
-
-        ca_act1, ca_act2 = st.columns(2)
-        with ca_act1:
-            if st.button("⚡ Marcar Dias Úteis (Seg-Sex)", key="btn_marcar_uteis_aloc"):
-                uteis = []
-                cur_d = dt_m_ini
-                while cur_d <= dt_m_fim:
-                    if cur_d.weekday() < 5:
-                        uteis.append(cur_d.strftime("%Y-%m-%d"))
-                    cur_d += timedelta(days=1)
-                definir_dias_uteis_alocacao(uteis, "Alocação Cliente", val_diaria_aloc, val_gas_aloc, val_ped_aloc)
-                st.rerun()
-        with ca_act2:
-            st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
-            if st.button("🗑️ Limpar Mês", key="btn_limpar_mes_aloc"):
-                limpar_alocacoes_periodo(dt_m_ini.strftime("%Y-%m-%d"), dt_m_fim.strftime("%Y-%m-%d"))
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        # Resumo consolidado do mês marcado com a matemática exata!
-        df_aloc_mes = pd.DataFrame()
-        if not df_aloc.empty:
-            df_aloc_mes = df_aloc[(df_aloc["data_alocacao"] >= dt_m_ini.strftime("%Y-%m-%d")) & (df_aloc["data_alocacao"] <= dt_m_fim.strftime("%Y-%m-%d"))]
-
-        qtd_dias_aloc = len(df_aloc_mes)
-        tot_diarias_bruto = df_aloc_mes["valor_diaria"].sum() if qtd_dias_aloc > 0 else 0.0
-        tot_gas_mes = df_aloc_mes["valor_gasolina"].sum() if qtd_dias_aloc > 0 else 0.0
-        tot_ped_mes = df_aloc_mes["valor_pedagio"].sum() if qtd_dias_aloc > 0 else 0.0
-        tot_lucro_liq_aloc = tot_diarias_bruto - tot_gas_mes
-        tot_reembolso_esperado = tot_diarias_bruto + tot_ped_mes
-
-        st.markdown(f"""
-        <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 12px; padding: 10px; margin-top: 8px;">
-            <div style="font-size: 0.70rem; font-weight: 800; color: #38bdf8; text-transform: uppercase;">
-                📊 Resumo das Alocações em {nome_m_aloc} ({qtd_dias_aloc} dia(s) marcado(s)):
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; font-size: 0.68rem;">
-                <div style="background: #111a28; padding: 6px 8px; border-radius: 8px;">
-                    <span style="color: #94a3b8;">⛽ Gasolina (R$ {val_gas_aloc:,.2f}/dia):</span><br>
-                    <strong style="color: #f87171; font-family: 'JetBrains Mono'; font-size: 0.82rem;">R$ {tot_gas_mes:,.2f}</strong>
-                </div>
-                <div style="background: #111a28; padding: 6px 8px; border-radius: 8px;">
-                    <span style="color: #94a3b8;">🛣️ Pedágios (R$ {val_ped_aloc:,.2f}/dia):</span><br>
-                    <strong style="color: #fbbf24; font-family: 'JetBrains Mono'; font-size: 0.82rem;">R$ {tot_ped_mes:,.2f}</strong>
-                </div>
-                <div style="background: #111a28; padding: 6px 8px; border-radius: 8px;">
-                    <span style="color: #94a3b8;">💰 Seu Lucro Líquido (R$ {(val_diaria_aloc - val_gas_aloc):,.2f}/dia):</span><br>
-                    <strong style="color: #4ade80; font-family: 'JetBrains Mono'; font-size: 0.82rem;">R$ {tot_lucro_liq_aloc:,.2f}</strong>
-                </div>
-                <div style="background: #111a28; padding: 6px 8px; border-radius: 8px;">
-                    <span style="color: #94a3b8;">📥 Reembolso Total Empresa:</span><br>
-                    <strong style="color: #38bdf8; font-family: 'JetBrains Mono'; font-size: 0.82rem;">R$ {tot_reembolso_esperado:,.2f}</strong>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # Referências sincronizadas diretamente do Calendário de Alocações
-    ref_diaria_cal = float(st.session_state.get("inp_diaria_aloc", 128.78))
-    ref_gas_cal = float(st.session_state.get("inp_gas_aloc", 30.00))
-    ref_ped_cal = float(st.session_state.get("inp_ped_aloc", 25.60))
-
-    # Conta dias marcados no mês do calendário de alocações para pré-preencher a calculadora se houver dias marcados
-    dt_ref_c_ini = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, 1).strftime("%Y-%m-%d")
-    dt_ref_c_fim = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, calendar.monthrange(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)[1]).strftime("%Y-%m-%d")
-    dias_marcados_ref = 0
-    if not df_aloc.empty:
-        dias_marcados_ref = len(df_aloc[(df_aloc["data_alocacao"] >= dt_ref_c_ini) & (df_aloc["data_alocacao"] <= dt_ref_c_fim)])
-    dias_default_calc = dias_marcados_ref if dias_marcados_ref > 0 else 5
-
-    # Botão de toggle para calculadora rápida de estimativa (sincronizado com os valores do Calendário de Alocações)
-    btn_calc_label = (
-        "➖ Ocultar Calculadora Rápida"
-        if st.session_state.mostrar_calc_km
-        else f"🧮 Calculadora Rápida (R$ {ref_diaria_cal:,.2f}/dia + R$ {ref_ped_cal:,.2f} Pedágio)"
-    )
-    if st.button(btn_calc_label, key="toggle_calc_km"):
-        st.session_state.mostrar_calc_km = not st.session_state.mostrar_calc_km
-        st.rerun()
-
-    if st.session_state.mostrar_calc_km:
-        st.markdown('<div style="background: #111a28; border: 1px solid #1c2a3d; border-radius: 12px; padding: 12px; margin-bottom: 14px;">', unsafe_allow_html=True)
-        st.caption(
-            f"🔗 Vinculada ao Calendário de Alocações: Diária **R$ {ref_diaria_cal:,.2f}** • "
-            f"Gasolina **R$ {ref_gas_cal:,.2f}/dia** • Pedágio **R$ {ref_ped_cal:,.2f}/dia**"
-        )
-        c_c1, c_c2 = st.columns(2)
-        with c_c1:
-            dias_est = st.number_input("Dias de alocação", min_value=1, value=dias_default_calc, step=1, key="calc_dias_est")
-            diaria_bruta_unit = st.number_input("Diária (R$)", min_value=0.0, value=ref_diaria_cal, step=1.0, key=f"calc_diaria_{ref_diaria_cal:.2f}")
-            gasolina_unit = st.number_input("Gasolina/dia (R$)", min_value=0.0, value=ref_gas_cal, step=1.0, key=f"calc_gas_{ref_gas_cal:.2f}")
-            pedagio_dia = st.number_input("Pedágio/dia (R$)", min_value=0.0, value=ref_ped_cal, step=1.0, key=f"calc_ped_{ref_ped_cal:.2f}")
-        with c_c2:
-            lucro_unit = diaria_bruta_unit - gasolina_unit
-            gasolina_est = dias_est * gasolina_unit
-            diarias_lucro = dias_est * lucro_unit
-            pedagio_total_est = dias_est * pedagio_dia
-            total_est = (dias_est * diaria_bruta_unit) + pedagio_total_est
-            st.caption(f"⛽ Gasolina (R$ {gasolina_unit:,.2f}/dia): **R$ {gasolina_est:,.2f}**")
-            st.caption(f"💰 Lucro Livre (R$ {lucro_unit:,.2f}/dia): **R$ {diarias_lucro:,.2f}**")
-            st.caption(f"🛣️ Pedágios Reembolsados: **R$ {pedagio_total_est:,.2f}**")
-            st.markdown(f"**Reembolso Total:** <span style='color: #4ade80; font-weight: 800;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # Botão de toggle para recolher/expandir o formulário de Destinação de Reembolso
-    btn_rateio_lbl = "➖ Ocultar Destinação de Reembolso" if st.session_state.mostrar_form_rateio else "🎯 Lançar / Destinar Reembolso (Rateio)"
-    if st.button(btn_rateio_lbl, key="toggle_form_rateio"):
-        st.session_state.mostrar_form_rateio = not st.session_state.mostrar_form_rateio
-        st.rerun()
-
-    if st.session_state.mostrar_form_rateio:
-        # Escolha de quantos destinos o usuário quer configurar
-        if "qtd_destinos" not in st.session_state:
-            st.session_state.qtd_destinos = 2
-
-        def recalcular_diferenca_destinos():
-            qtd = st.session_state.get("qtd_destinos", 2)
-            total = float(st.session_state.get("reemb_total_val", 0.0))
-            letras_cb = ["A", "B", "C", "D", "E"]
-            if qtd == 1:
-                st.session_state["v_A"] = round(total, 2)
-            else:
-                soma_anteriores = 0.0
-                for i in range(qtd - 1):
-                    soma_anteriores += float(st.session_state.get(f"v_{letras_cb[i]}", 0.0))
-                ultima_letra = letras_cb[qtd - 1]
-                st.session_state[f"v_{ultima_letra}"] = round(max(0.0, total - soma_anteriores), 2)
-
-        c_sel_q1, c_sel_q2 = st.columns([2.5, 1.5])
-        with c_sel_q1:
-            st.markdown('<div style="font-size: 0.78rem; font-weight: 700; color: #ffffff; padding-top: 8px;">Quantos destinos quer ratear?</div>', unsafe_allow_html=True)
-        with c_sel_q2:
-            qtd_escolhida = st.selectbox(
-                "Qtd", 
-                [1, 2, 3, 4, 5], 
-                index=[1, 2, 3, 4, 5].index(st.session_state.qtd_destinos),
-                label_visibility="collapsed",
-                key="sel_qtd_destinos_widget"
-            )
-            if qtd_escolhida != st.session_state.qtd_destinos:
-                st.session_state.qtd_destinos = qtd_escolhida
-                recalcular_diferenca_destinos()
-                st.rerun()
-
-        # Inicializa valores na sessão se ainda não existirem
-        if "reemb_total_val" not in st.session_state:
-            st.session_state["reemb_total_val"] = 617.00
-        if "v_A" not in st.session_state:
-            st.session_state["v_A"] = 150.00
-        if "v_B" not in st.session_state:
-            st.session_state["v_B"] = round(max(0.0, st.session_state["reemb_total_val"] - st.session_state["v_A"]), 2)
-        for l_init in ["C", "D", "E"]:
-            if f"v_{l_init}" not in st.session_state:
-                st.session_state[f"v_{l_init}"] = 0.0
-
-        st.markdown('<div style="background: #0d1522; border: 1px solid #1e2d44; border-radius: 14px; padding: 12px; margin-top: 8px; margin-bottom: 12px;">', unsafe_allow_html=True)
-        st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #ffffff; margin-bottom: 8px;">1. Entrada Total de Reembolso Recebido:</div>', unsafe_allow_html=True)
-        c_v1, c_v2 = st.columns(2)
-        with c_v1:
-            data_receb = st.date_input("Data do Recebimento / Agendamento", value=date.today(), key="reemb_data_input")
-        with c_v2:
-            valor_total_recebido = st.number_input(
-                "Valor Total (R$)", 
-                min_value=0.01, 
-                step=10.0, 
-                key="reemb_total_val",
-                on_change=recalcular_diferenca_destinos
-            )
-
-        is_reemb_efetivado = (data_receb <= date.today())
-        if is_reemb_efetivado:
-            st.markdown(f"""
-            <div style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 10px; padding: 7px 10px; margin: 6px 0 8px 0; font-size: 0.68rem; color: #4ade80;">
-                ✅ <strong>Data de hoje/passada ({data_receb.strftime('%d/%m/%Y')}):</strong> Os saldos, faturas ou cheque especial serão atualizados imediatamente.
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 10px; padding: 7px 10px; margin: 6px 0 8px 0; font-size: 0.68rem; color: #eab308;">
-                ⏳ <strong>Data Futura ({data_receb.strftime('%d/%m/%Y')}):</strong> Não mexe no seu saldo/fatura hoje. Será abatido/creditado automaticamente no dia <strong>{data_receb.strftime('%d/%m/%Y')}</strong>!
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown(f'<div style="font-size: 0.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">2. Configurar os {st.session_state.qtd_destinos} Destino(s):</div>', unsafe_allow_html=True)
-        st.caption("Ao digitar o valor em um destino, a diferença restante é calculada automaticamente no próximo:")
-
-        destinos_coletados = []
-        bancos_list = df_bancos["banco"].tolist()
-        cores_letras = ["#38bdf8", "#fbbf24", "#4ade80", "#a855f7", "#f43f5e"]
-        letras = ["A", "B", "C", "D", "E"]
-        sugestoes_motivos = [
-            "Pedágio no Cartão de Crédito",
-            "Gasolina no Cheque Especial",
-            "Renda livre / Lucro das diárias",
-            "Outro gasto / Ajuste",
-            "Reserva / Poupança"
-        ]
-
-        for idx_d in range(st.session_state.qtd_destinos):
-            letra = letras[idx_d]
-            cor = cores_letras[idx_d % len(cores_letras)]
-            sugestao_banco = idx_d if idx_d < len(bancos_list) else 0
-            is_ultimo = (idx_d == st.session_state.qtd_destinos - 1)
-            tag_auto = " • ⚡ Diferença Automática" if (is_ultimo and st.session_state.qtd_destinos > 1) else ""
-        
-            st.markdown(f"""
-            <div style="background: #111a28; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.72rem; font-weight: 700; color: {cor};">🎯 Destino {letra}{tag_auto}</span>
-            """, unsafe_allow_html=True)
-        
-            c_d1, c_d2 = st.columns(2)
-            with c_d1:
-                banco_d = st.selectbox(f"Banco ({letra})", bancos_list, index=sugestao_banco, key=f"b_{letra}")
-            with c_d2:
-                val_d = st.number_input(
-                    f"Valor R$ ({letra})", 
-                    min_value=0.0, 
-                    step=10.0, 
-                    key=f"v_{letra}",
-                    on_change=(recalcular_diferenca_destinos if not is_ultimo else None)
-                )
-
-            acao_d = st.selectbox(
-                f"Ação ({letra})", 
-                ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], 
-                index=0 if idx_d == 0 else (1 if idx_d == 1 else 2), 
-                key=f"ac_{letra}"
-            )
-            motivo_d = st.text_input(
-                f"Identificação / Motivo ({letra})", 
-                value=sugestoes_motivos[idx_d % len(sugestoes_motivos)], 
-                key=f"m_{letra}"
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-            destinos_coletados.append({
-                "banco": banco_d,
-                "acao": acao_d,
-                "valor": val_d,
-                "motivo": motivo_d
-            })
-
-        # Conferência em tempo real da soma dos destinos vs total recebido
-        soma_atual = sum(d["valor"] for d in destinos_coletados)
-        diferenca_atual = valor_total_recebido - soma_atual
-        cor_conf = "#4ade80" if abs(diferenca_atual) < 0.01 else "#fbbf24"
-        status_conf = "✅ 100% Rateado" if abs(diferenca_atual) < 0.01 else (f"⚠️ Falta destinar: R$ {diferenca_atual:,.2f}" if diferenca_atual > 0 else f"⚠️ Excedeu em: R$ {abs(diferenca_atual):,.2f}")
-
-        st.markdown(f"""
-        <div style="background: #111a28; border: 1px solid #223249; border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem;">
-            <span style="color: #94a3b8;">Distribuído: <strong style="color: #ffffff;">R$ {soma_atual:,.2f}</strong> / R$ {valor_total_recebido:,.2f}</span>
-            <span style="color: {cor_conf}; font-weight: 800;">{status_conf}</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button("🚀 Executar Entrada & Destinar Automaticamente", key="btn_executar_rateio_dinamico", type="primary"):
-            destinos_ativos = [d for d in destinos_coletados if d["valor"] > 0]
-            if not destinos_ativos:
-                st.error("Informe um valor maior que zero em pelo menos um destino!")
-            else:
-                aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), valor_total_recebido, destinos_ativos, efetivar_agora=is_reemb_efetivado)
-                if is_reemb_efetivado:
-                    st.success(f"Reembolso de R$ {valor_total_recebido:,.2f} efetivado nos saldos e faturas!")
-                else:
-                    st.success(f"Reembolso futuro de R$ {valor_total_recebido:,.2f} agendado para {data_receb.strftime('%d/%m/%Y')}! Ele só alterará seus saldos/faturas nessa data.")
-                st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-
-    # Histórico de Destinações com Edição, Baixa, Estorno e Botão Recolher
-    df_itens_hist = get_reembolsos_itens()
-    if not df_itens_hist.empty:
-        c_da1, c_da2 = st.columns([3.8, 1.8])
-        with c_da1:
-            st.markdown(f'<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 12px 0 6px 0;">Destinações Ativas ({len(df_itens_hist)}):</div>', unsafe_allow_html=True)
-        with c_da2:
-            st.markdown('<div class="btn-action-icon" style="margin-top: 6px;">', unsafe_allow_html=True)
-            lbl_rec_da = "👁️ Mostrar" if st.session_state.recolher_dest_reemb else "🔼 Recolher"
-            if st.button(lbl_rec_da, key="btn_toggle_rec_da"):
-                st.session_state.recolher_dest_reemb = not st.session_state.recolher_dest_reemb
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        if st.session_state.recolher_dest_reemb:
-            st.caption(f"Destinações recolhidas ({len(df_itens_hist)} item(ns) oculto(s)). Clique em **👁️ Mostrar** para ver.")
-        else:
-
-
-            # Formulário de Edição de Destinação
-            if st.session_state.editando_reemb_id is not None:
-                reemb_edit_df = df_itens_hist[df_itens_hist["id"] == st.session_state.editando_reemb_id]
-                if not reemb_edit_df.empty:
-                    r_ed = reemb_edit_df.iloc[0]
-                    st.markdown("""
-                    <div style="background: #101c2e; border: 1px solid #38bdf8; border-radius: 14px; padding: 12px; margin-bottom: 12px;">
-                        <span style="font-size: 0.82rem; font-weight: 800; color: #38bdf8;">✏️ Editando Destinação de Reembolso</span>
-                    """, unsafe_allow_html=True)
-                    with st.form("form_editar_destinacao_reemb"):
-                        try:
-                            dt_ed_base = datetime.strptime(str(r_ed["data"]), "%Y-%m-%d").date()
-                        except:
-                            dt_ed_base = date.today()
-
-                        c_er1, c_er2 = st.columns(2)
-                        with c_er1:
-                            ed_dt_r = st.date_input("Data Prevista / Efetivação", value=dt_ed_base)
-                            b_list_r = df_bancos["banco"].tolist()
-                            idx_br = b_list_r.index(r_ed["banco"]) if r_ed["banco"] in b_list_r else 0
-                            ed_banco_r = st.selectbox("Banco Destino", b_list_r, index=idx_br)
-                        with c_er2:
-                            ed_val_r = st.number_input("Valor (R$)", min_value=0.01, value=float(r_ed["valor"]), step=10.0)
-                            acoes_r = ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"]
-                            idx_ar = acoes_r.index(r_ed["acao"]) if r_ed["acao"] in acoes_r else 0
-                            ed_acao_r = st.selectbox("Ação / Finalidade", acoes_r, index=idx_ar)
-
-                        ed_motivo_r = st.text_input("Identificação / Motivo", value=str(r_ed["motivo"]))
-
-                        c_br1, c_br2 = st.columns(2)
-                        with c_br1:
-                            if st.form_submit_button("💾 Salvar Alteração"):
-                                atualizar_item_destino(
-                                    int(r_ed["id"]),
-                                    ed_dt_r.strftime("%Y-%m-%d"),
-                                    ed_banco_r,
-                                    ed_acao_r,
-                                    ed_val_r,
-                                    ed_motivo_r
-                                )
-                                st.session_state.editando_reemb_id = None
-                                st.success("Destinação atualizada com sucesso!")
-                                st.rerun()
-                        with c_br2:
-                            if st.form_submit_button("✕ Cancelar"):
-                                st.session_state.editando_reemb_id = None
-                                st.rerun()
-                    st.markdown("</div>", unsafe_allow_html=True)
-
-            for _, item in df_itens_hist.iterrows():
-                st_item = item.get("status", "Efetivado")
-                badge_st = "⏳ Previsto" if st_item == "Previsto" else "✅ Efetivado"
-                cor_st = "#eab308" if st_item == "Previsto" else "#4ade80"
-                c_info_d, c_btn_est = st.columns([3.5, 2.5])
-                with c_info_d:
-                    st.markdown(f"""
-                    <div style="background: #0d1522; border: 1px solid #1a273b; border-left: 3px solid {cor_st}; border-radius: 10px; padding: 8px 10px; margin-bottom: 6px;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="font-weight: 700; color: #ffffff; font-size: 0.76rem;">{item['banco']} • {item['acao']}</span>
-                            <span style="color: {cor_st}; font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.8rem;">R$ {item['valor']:,.2f}</span>
-                        </div>
-                        <div style="font-size: 0.63rem; color: #94a3b8;">📅 {item['data']} • {item['motivo']} • <strong style="color:{cor_st};">{badge_st}</strong></div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with c_btn_est:
-                    if st_item == "Previsto":
-                        cb1, cb2, cb3 = st.columns(3)
-                        with cb1:
-                            st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
-                            if st.button("✏️", key=f"btn_ed_reemb_{item['id']}", help="Editar destinação futura"):
-                                st.session_state.editando_reemb_id = int(item["id"])
-                                st.rerun()
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        with cb2:
-                            st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
-                            if st.button("✅", key=f"btn_ef_reemb_{item['id']}", help="Confirmar que caiu na conta"):
-                                efetivar_reembolso_item(item["id"])
-                                if st.session_state.editando_reemb_id == int(item["id"]):
-                                    st.session_state.editando_reemb_id = None
-                                st.success("Reembolso efetivado!")
-                                st.rerun()
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        with cb3:
-                            st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                            if st.button("↩️", key=f"btn_est_{item['id']}", help="Cancelar/Excluir"):
-                                estornar_item_destino(item["id"])
-                                if st.session_state.editando_reemb_id == int(item["id"]):
-                                    st.session_state.editando_reemb_id = None
-                                st.rerun()
-                            st.markdown('</div>', unsafe_allow_html=True)
-                    else:
-                        cb1, cb2 = st.columns(2)
-                        with cb1:
-                            st.markdown('<div class="btn-action-icon" style="margin-top: 4px;">', unsafe_allow_html=True)
-                            if st.button("✏️", key=f"btn_ed_reemb_{item['id']}", help="Editar destinação"):
-                                st.session_state.editando_reemb_id = int(item["id"])
-                                st.rerun()
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        with cb2:
-                            st.markdown('<div class="btn-clear" style="margin-top: 4px;">', unsafe_allow_html=True)
-                            if st.button("↩️", key=f"btn_est_{item['id']}", help="Desfazer e estornar este valor"):
-                                estornar_item_destino(item["id"])
-                                if st.session_state.editando_reemb_id == int(item["id"]):
-                                    st.session_state.editando_reemb_id = None
-                                st.success("Destinação estornada!")
-                                st.rerun()
-                            st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.bloco_ativo == "advisor":
-    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-    c_tit, c_fech = st.columns([5, 1])
-    with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">🧠 Advisor • Diagnóstico Completo & Plano de Virada</span>', unsafe_allow_html=True)
-    with c_fech:
-        if st.button("✕", key="fechar_adv"):
-            st.session_state.bloco_ativo = None
-            st.rerun()
-
-    diagnosticos = []
-
-    # --- DADOS CONSOLIDADOS DO CICLO ATUAL (04/MM a 03/MM+1) ---
-    dt_adv_ini, dt_adv_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
-    meses_pt_adv = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
-    nome_mes_adv = meses_pt_adv[st.session_state.cal_mes - 1]
-
-    entradas_fixas_ou_prev = 0.0
-    saidas_fixas_ou_prev = 0.0
-    saidas_por_categoria = {}
-
-    if not df_prev.empty:
-        for _, r_p in df_prev.iterrows():
-            try:
-                d_p = datetime.strptime(r_p["data_prevista"], "%Y-%m-%d").date()
-                if dt_adv_ini <= d_p <= dt_adv_fim:
-                    v_p = float(r_p["valor"])
-                    if r_p["tipo"] == "Entrada":
-                        entradas_fixas_ou_prev += v_p
-                    else:
-                        saidas_fixas_ou_prev += v_p
-                        cat_p = str(r_p.get("categoria", "Outros"))
-                        saidas_por_categoria[cat_p] = saidas_por_categoria.get(cat_p, 0.0) + v_p
-            except:
-                pass
-
-    # Reembolsos previstos no ciclo
-    reemb_livre_adv = 0.0
-    reemb_dest_adv = 0.0
-    if not df_reemb_itens.empty:
-        for _, r_ri in df_reemb_itens.iterrows():
-            try:
-                d_r = datetime.strptime(r_ri["data"], "%Y-%m-%d").date()
-                if dt_adv_ini <= d_r <= dt_adv_fim:
-                    if r_ri["acao"] == "Creditar em Conta Corrente":
-                        reemb_livre_adv += float(r_ri["valor"])
-                    else:
-                        reemb_dest_adv += float(r_ri["valor"])
-            except:
-                pass
-
-    # Análise detalhada das compras parceladas
-    total_parcelas_mes = df_parc["valor_parcela"].sum() if not df_parc.empty else 0.0
-    total_divida_parcelas = sum(max(0, int(r["total_parcelas"]) - int(r["parcela_atual"])) * float(r["valor_parcela"]) for _, r in df_parc.iterrows()) if not df_parc.empty else 0.0
-
-    # --- 1. PROJEÇÃO MÊS A MÊS (6 MESES) PARA DESCOBRIR QUANDO COMEÇA A SOBRAR MAIS DINHEIRO ---
-    # Calcula renda recorrente mensal base (salários/rendas fixas ou entradas do ciclo atual) e gastos recorrentes base
-    renda_mensal_base = entradas_fixas_ou_prev
-    if renda_mensal_base == 0 and not df_prev.empty:
-        # Fallback: média das entradas cadastradas por mês
-        renda_mensal_base = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() / max(1, len(df_prev[df_prev["tipo"] == "Entrada"]["data_prevista"].str[:7].unique()))
-
-    # Gastos fixos/recorrentes mensais (excluindo faturas variáveis se já estiverem nas parcelas, mas considerando contas fixas)
-    gastos_mensais_base = saidas_fixas_ou_prev
-
-    projecoes_6m = []
-    mes_virada_nome = None
-    ganho_mensal_virada = 0.0
-
-    for offset_m in range(0, 6):
-        dt_ref_m = date(st.session_state.cal_ano, st.session_state.cal_mes, 1) + relativedelta(months=offset_m)
-        m_idx = dt_ref_m.month
-        y_val = dt_ref_m.year
-        label_m = f"{meses_pt_adv[m_idx - 1][:3]}/{str(y_val)[2:]}"
-
-        # Parcelas ainda ativas nesse mês futuro (parcela_atual + offset_m <= total_parcelas)
-        parc_ativas_m = 0.0
-        parc_quitadas_ate_aqui = 0.0
-        if not df_parc.empty:
-            for _, rp in df_parc.iterrows():
-                p_at = int(rp["parcela_atual"])
-                p_tot = int(rp["total_parcelas"])
-                v_p = float(rp["valor_parcela"])
-                if (p_at + offset_m) <= p_tot:
-                    parc_ativas_m += v_p
-                else:
-                    parc_quitadas_ate_aqui += v_p
-
-        # Entradas e saídas previstas especificamente naquele ciclo futuro (se o usuário já repetiu meses)
-        dt_c_i, dt_c_f, _ = get_intervalo_ciclo(y_val, m_idx, "Ciclo Completo (04 a 03)")
-        ent_m = 0.0
-        sai_m = 0.0
-        if not df_prev.empty:
-            for _, r_pr in df_prev.iterrows():
-                try:
-                    dp_obj = datetime.strptime(r_pr["data_prevista"], "%Y-%m-%d").date()
-                    if dt_c_i <= dp_obj <= dt_c_f:
-                        if r_pr["tipo"] == "Entrada":
-                            ent_m += float(r_pr["valor"])
-                        else:
-                            sai_m += float(r_pr["valor"])
-                except:
-                    pass
-
-        if ent_m == 0.0:
-            ent_m = renda_mensal_base
-        if sai_m == 0.0:
-            sai_m = gastos_mensais_base
-
-        # Se o usuário não lançou a fatura/parcelas dentro das saídas previstas daquele mês, adiciona a diferença das parcelas
-        # Para evitar dupla contagem no mês 0, comparamos a redução de parcelas em relação ao mês atual
-        alivio_parcelas = max(0.0, total_parcelas_mes - parc_ativas_m)
-        sobra_estimada_m = (ent_m - sai_m) + alivio_parcelas + (reemb_livre_adv if offset_m == 0 else 0.0)
-
-        projecoes_6m.append({
-            "mes": label_m,
-            "parcelas": parc_ativas_m,
-            "alivio": alivio_parcelas,
-            "sobra": sobra_estimada_m
-        })
-
-        if offset_m > 0 and mes_virada_nome is None and alivio_parcelas >= 100.0 and sobra_estimada_m > 0:
-            mes_virada_nome = f"{meses_pt_adv[m_idx - 1]}/{y_val}"
-            ganho_mensal_virada = alivio_parcelas
-
-    # Se não houve alívio >= 100 por parcelas, identifica o primeiro mês com sobra positiva relevante
-    if mes_virada_nome is None:
-        for idx_p, item_p in enumerate(projecoes_6m):
-            if idx_p > 0 and item_p["sobra"] > projecoes_6m[0]["sobra"] + 50.0:
-                dt_v = date(st.session_state.cal_ano, st.session_state.cal_mes, 1) + relativedelta(months=idx_p)
-                mes_virada_nome = f"{meses_pt_adv[dt_v.month - 1]}/{dt_v.year}"
-                ganho_mensal_virada = item_p["sobra"] - projecoes_6m[0]["sobra"]
-                break
-
-    # Card Destaque: Previsão de Quando Vai Começar a Sobrar Mais Dinheiro
-    sobra_atual_ciclo = projecoes_6m[0]["sobra"] if projecoes_6m else 0.0
-    if mes_virada_nome:
-        resumo_virada_html = (
-            f"Hoje sua sobra líquida projetada em <strong>{nome_mes_adv}</strong> é de "
-            f"<strong style='color: {'#4ade80' if sobra_atual_ciclo >= 0 else '#f87171'};'>R$ {sobra_atual_ciclo:,.2f}</strong>. "
-            f"Com o encerramento natural das suas parcelas atuais, o <strong>ponto de virada será em {mes_virada_nome}</strong>, "
-            f"quando você passará a ter <strong style='color: #4ade80;'>+ R$ {ganho_mensal_virada:,.2f}/mês</strong> extras livres no orçamento!"
-        )
-    elif total_parcelas_mes > 0:
-        # Calcula o mês exato em que a primeira parcela termina
-        menor_restante = min(max(1, int(r["total_parcelas"]) - int(r["parcela_atual"]) + 1) for _, r in df_parc.iterrows())
-        dt_fim_prim = date(st.session_state.cal_ano, st.session_state.cal_mes, 1) + relativedelta(months=menor_restante)
-        mes_fim_str = f"{meses_pt_adv[dt_fim_prim.month - 1]}/{dt_fim_prim.year}"
-        resumo_virada_html = (
-            f"Hoje você compromete <strong>R$ {total_parcelas_mes:,.2f}/mês</strong> com compras parceladas (saldo devedor total de R$ {total_divida_parcelas:,.2f}). "
-            f"Se não fizer novas parcelas, seu orçamento começa a aliviar a partir de <strong>{mes_fim_str}</strong>."
-        )
-    else:
-        resumo_virada_html = (
-            f"Sua sobra líquida projetada em <strong>{nome_mes_adv}</strong> é de "
-            f"<strong style='color: {'#4ade80' if sobra_atual_ciclo >= 0 else '#f87171'};'>R$ {sobra_atual_ciclo:,.2f}</strong>. "
-            f"Como você não tem parcelas longas pesando nos próximos meses, cortar os ralos abaixo aumenta sua sobra imediatamente já no próximo ciclo."
-        )
-
-    # Mini tabela visual de 6 meses dentro do Advisor (HTML compacto sem indentação para evitar code-block do Markdown!)
-    cols_6m_parts = []
-    for p6 in projecoes_6m:
-        c_s = "#4ade80" if p6["sobra"] >= 0 else "#f87171"
-        s_txt = f"{'+' if p6['sobra'] >= 0 else ''}{p6['sobra']:,.0f}"
-        cols_6m_parts.append(
-            f'<div style="background:#111a28;border:1px solid #1e2d44;border-radius:8px;padding:6px 4px;text-align:center;">'
-            f'<div style="font-size:0.60rem;color:#94a3b8;font-weight:700;">{p6["mes"]}</div>'
-            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.68rem;font-weight:800;color:{c_s};margin-top:2px;">{s_txt}</div>'
-            f'<div style="font-size:0.52rem;color:#64748b;margin-top:1px;">Parc: {p6["parcelas"]:,.0f}</div>'
-            f'</div>'
-        )
-    cols_6m_html = "".join(cols_6m_parts)
-
-    st.markdown(
-        f'<div style="background:linear-gradient(145deg,#132136 0%,#0d1624 100%);border:1px solid #2b456b;border-radius:14px;padding:12px;margin:8px 0 12px 0;">'
-        f'<div style="font-size:0.74rem;font-weight:800;color:#38bdf8;text-transform:uppercase;">📈 Projeção de Virada (Próximos 6 Meses)</div>'
-        f'<div style="font-size:0.72rem;color:#e2e8f0;margin-top:5px;line-height:1.45;">{resumo_virada_html}</div>'
-        f'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:10px;">{cols_6m_html}</div>'
-        f'</div>',
-        unsafe_allow_html=True
-    )
-
-    # --- 2. ONDE VOCÊ ESTÁ PERDENDO DINHEIRO (RALOS FINANCEIROS DETECTADOS) ---
-    ralos = []
-    if total_cheque > 0:
-        juros_est_mes = total_cheque * 0.08  # ~8% ao mês média cheque especial
-        ralos.append(
-            f"<strong>1. Juros de Cheque Especial (R$ {total_cheque:,.2f} em uso):</strong> Você está perdendo cerca de "
-            f"<strong style='color:#f87171;'>R$ {juros_est_mes:,.2f}/mês</strong> só em juros rotativos. Zerar isso é a prioridade #1."
-        )
-
-    if renda_mensal_base > 0 and total_parcelas_mes > 0:
-        pct_parc_renda = (total_parcelas_mes / renda_mensal_base) * 100
-        if pct_parc_renda >= 25.0:
-            ralos.append(
-                f"<strong>2. Bola de Neve no Cartão ({pct_parc_renda:.0f}% da renda):</strong> Suas parcelas somam "
-                f"<strong>R$ {total_parcelas_mes:,.2f}/mês</strong> (totalizando R$ {total_divida_parcelas:,.2f} a pagar). "
-                f"Evite qualquer compra parcelada nova pelos próximos 60 dias para destravar seu fluxo."
-            )
-
-    # Verifica gastos no extrato por categoria (ex: Lazer, Alimentação, Transporte)
-    if not df_tx.empty:
-        tx_saidas = df_tx[df_tx["tipo"] == "Saída"].copy()
-        if not tx_saidas.empty:
-            gastos_cat = tx_saidas.groupby("categoria")["valor"].sum().sort_values(ascending=False)
-            top_cat = gastos_cat.index[0]
-            top_cat_val = float(gastos_cat.iloc[0])
-            if top_cat_val > 150.0:
-                ralos.append(
-                    f"<strong>3. Maior Vazamento no Extrato ({top_cat}):</strong> Você já acumulou "
-                    f"<strong>R$ {top_cat_val:,.2f}</strong> lançados em <em>{top_cat}</em>. "
-                    f"Reduzir 20% dessa categoria economiza <strong>R$ {top_cat_val * 0.20:,.2f}</strong> direto no seu bolso."
-                )
-
-    # Verifica dinheiro parado em conta sem rendimento ou fatura alta
-    if total_faturas > total_saldos and total_faturas > 0:
-        gap_fat = total_faturas - total_saldos
-        ralos.append(
-            f"<strong>4. Descasamento de Caixa (Faturas vs. Saldo):</strong> Suas faturas atuais (R$ {total_faturas:,.2f}) "
-            f"superam seu saldo real em conta (R$ {total_saldos:,.2f}) em <strong>R$ {gap_fat:,.2f}</strong>. "
-            f"Isso obriga você a depender integralmente do próximo salário para cobrir gastos já feitos."
-        )
-
-    if not ralos:
-        ralos.append("Nenhum vazamento grave de juros ou excesso de parcelas detectado hoje. Mantenha o controle rígido dos gastos variáveis para acelerar sua reserva.")
-
-    diagnosticos.append({
-        "titulo": "🔍 Onde Você Está Perdendo Dinheiro & Como Ajustar:",
-        "tipo": "danger" if (total_cheque > 0 or total_faturas > total_saldos) else "warning",
-        "desc": "<br>• ".join([""] + ralos)[5:]
-    })
-
-    # --- 3. CAMINHO PRÁTICO PARA SOBRAR DINHEIRO (PLANO DE AÇÃO EM 3 PASSOS) ---
-    passo1 = (
-        f"<strong>Passo 1 (Estancar Juros):</strong> Use os reembolsos de KM e entradas dos dias 03/16 para manter o Cheque Especial em <strong>R$ 0,00</strong>."
-        if total_cheque > 0 else
-        "<strong>Passo 1 (Proteção):</strong> Mantenha o Cheque Especial zerado e concentre combustível/pedágio apenas no cartão com maior prazo."
-    )
-    passo2 = (
-        f"<strong>Passo 2 (Trava de Parcelas):</strong> Congele novos parcelamentos até liquidar as parcelas atuais (R$ {total_parcelas_mes:,.2f}/mês)."
-        if total_parcelas_mes > 0 else
-        "<strong>Passo 2 (Compra à Vista):</strong> Continue sem parcelas pesadas e priorize pagamentos no Pix com desconto."
-    )
-    meta_reserva = max(100.0, round(renda_mensal_base * 0.10, 2)) if renda_mensal_base > 0 else 200.0
-    passo3 = (
-        f"<strong>Passo 3 (Pague-se Primeiro):</strong> Assim que cair o salário do dia 03 ou 16, separe imediatamente "
-        f"<strong>R$ {meta_reserva:,.2f} (10% da renda)</strong> em uma conta separada (Nubank/Mercado Pago) antes de pagar contas variáveis."
-    )
-    diagnosticos.append({
-        "titulo": "🧭 Caminho para Ajustar Sua Vida Financeira:",
-        "tipo": "success",
-        "desc": f"{passo1}<br>{passo2}<br>{passo3}"
-    })
-
-    # --- 4. ANÁLISE DE REEMBOLSOS FUTUROS DESTINADOS À CONTA CORRENTE ---
-    reemb_fut_cc = pd.DataFrame()
-    if not df_reemb_itens.empty:
-        reemb_fut_cc = df_reemb_itens[
-            (df_reemb_itens.get("status", "Efetivado") == "Previsto") &
-            (df_reemb_itens["acao"] == "Creditar em Conta Corrente")
-        ]
-
-    if not reemb_fut_cc.empty:
-        total_reemb_cc = reemb_fut_cc["valor"].sum()
-        bancos_dest_cc = ", ".join(reemb_fut_cc["banco"].unique())
-        contas_com_cheque = df_bancos[df_bancos["cheque_especial_usado"] > 0].sort_values(by="cheque_especial_usado", ascending=False)
-        cartoes_ativos = df_bancos[df_bancos["tem_cartao"] == 1].copy()
-        if not cartoes_ativos.empty:
-            cartoes_ativos["uso_pct"] = cartoes_ativos.apply(
-                lambda r: (r["fatura_atual"] / r["limite_cartao"] * 100) if r["limite_cartao"] > 0 else 0.0,
-                axis=1
-            )
-
-        if not contas_com_cheque.empty:
-            pior_cheque = contas_com_cheque.iloc[0]
-            val_abater = min(total_reemb_cc, float(pior_cheque["cheque_especial_usado"]))
-            sobra_apos_cheque = max(0.0, total_reemb_cc - val_abater)
-            msg_acao_reemb = (
-                f"Você agendou <strong>R$ {total_reemb_cc:,.2f}</strong> de reembolso futuro para cair em Conta Corrente ({bancos_dest_cc}). "
-                f"<strong>Recomendação:</strong> Assim que cair, transfira <strong>R$ {val_abater:,.2f}</strong> para cobrir o Cheque Especial do "
-                f"<strong>{pior_cheque['banco']}</strong> (R$ {pior_cheque['cheque_especial_usado']:,.2f})."
-            )
-            if sobra_apos_cheque > 0:
-                msg_acao_reemb += f" Os <strong>R$ {sobra_apos_cheque:,.2f}</strong> restantes deixe rendendo em conta para gasolina."
-            diagnosticos.append({
-                "titulo": "💡 Destino Ideal para o Reembolso Futuro em Conta:",
-                "tipo": "warning",
-                "desc": msg_acao_reemb
-            })
-        elif not cartoes_ativos.empty and cartoes_ativos["uso_pct"].max() >= 70.0:
-            cartao_apertado = cartoes_ativos.sort_values(by="uso_pct", ascending=False).iloc[0]
-            val_adiantar = min(total_reemb_cc, float(cartao_apertado["fatura_atual"]))
-            diagnosticos.append({
-                "titulo": "💡 Destino Ideal para o Reembolso Futuro em Conta:",
-                "tipo": "info",
-                "desc": (
-                    f"Você tem <strong>R$ {total_reemb_cc:,.2f}</strong> previstos para Conta Corrente ({bancos_dest_cc}). "
-                    f"Como o cartão <strong>{cartao_apertado['banco']}</strong> está com <strong>{cartao_apertado['uso_pct']:.0f}% do limite comprometido</strong>, "
-                    f"vale adiantar <strong>R$ {val_adiantar:,.2f}</strong> nessa fatura para liberar limite para os próximos pedágios."
-                )
-            })
-        else:
-            diagnosticos.append({
-                "titulo": "💡 Destino Ideal para o Reembolso Futuro em Conta:",
-                "tipo": "success",
-                "desc": (
-                    f"Você tem <strong>R$ {total_reemb_cc:,.2f}</strong> previstos para cair em Conta Corrente ({bancos_dest_cc}). "
-                    f"Com Cheque Especial zerado e faturas controladas, <strong>mantenha esse valor rendendo em conta</strong> para pagar a gasolina das próximas alocações à vista!"
-                )
-            })
-
-    # --- 5. ESTRATÉGIA MENSAL PRECISA PARA GASOLINA & PEDÁGIO COM BASE NO CALENDÁRIO DE ALOCAÇÕES ---
-    dia_hoje = date.today().day
-    last_d_adv = calendar.monthrange(st.session_state.cal_ano, st.session_state.cal_mes)[1]
-    dt_m_adv_ini = date(st.session_state.cal_ano, st.session_state.cal_mes, 1).strftime("%Y-%m-%d")
-    dt_m_adv_fim = date(st.session_state.cal_ano, st.session_state.cal_mes, last_d_adv).strftime("%Y-%m-%d")
-
-    df_aloc_adv = pd.DataFrame()
-    if not df_aloc.empty:
-        df_aloc_adv = df_aloc[(df_aloc["data_alocacao"] >= dt_m_adv_ini) & (df_aloc["data_alocacao"] <= dt_m_adv_fim)]
-
-    qtd_dias_prev_aloc = len(df_aloc_adv)
-    if qtd_dias_prev_aloc > 0:
-        gasto_gas_mensal_aloc = float(df_aloc_adv["valor_gasolina"].sum())
-        gasto_ped_mensal_aloc = float(df_aloc_adv["valor_pedagio"].sum())
-        lucro_liq_mensal_aloc = float(df_aloc_adv["valor_diaria"].sum()) - gasto_gas_mensal_aloc
-        reemb_tot_mensal_aloc = float(df_aloc_adv["valor_diaria"].sum()) + gasto_ped_mensal_aloc
-    else:
-        # Fallback: se ainda não marcou dias no calendário, estima para 1 semana padrão (5 dias) e avisa para marcar
-        qtd_dias_prev_aloc = 5
-        gasto_gas_mensal_aloc = 5 * 30.00
-        gasto_ped_mensal_aloc = 5 * 25.60
-        lucro_liq_mensal_aloc = 5 * 98.78
-        reemb_tot_mensal_aloc = 5 * (128.78 + 25.60)
-
-    custo_operacional_aloc = gasto_gas_mensal_aloc + gasto_ped_mensal_aloc
-    tag_origem_aloc = (
-        f"Com base nos <strong>{qtd_dias_prev_aloc} dias marcados</strong> no Calendário de Alocações de {nome_mes_adv}"
-        if not df_aloc_adv.empty else
-        f"<em>(Simulação base de 5 dias — marque os dias exatos em ⛽ Destinar Reembolso → 🗓️ Calendário de Alocações)</em>"
-    )
-
-    # Analisa melhor conta corrente para pagar Gasolina à vista e melhor cartão para passar Pedágio (ou ambos)
-    contas_com_saldo = df_bancos[df_bancos["saldo_conta"] > 0].sort_values(by="saldo_conta", ascending=False)
-    melhor_conta_gas = contas_com_saldo.iloc[0] if not contas_com_saldo.empty else None
-
-    cartoes_disp = df_bancos[df_bancos["tem_cartao"] == 1].copy()
-    melhor_cartao_row = None
-    if not cartoes_disp.empty:
-        def score_cartao(row):
-            lim_t = float(row["limite_cartao"])
-            fat = float(row["fatura_atual"])
-            lim_lib = float(row["limite_liberado"]) if float(row["limite_liberado"]) > 0 else max(0.0, lim_t - fat)
-            dia_f = int(row.get("dia_fechamento", 3))
-            dia_v = int(row.get("dia_vencimento", 10))
-            if dia_hoje >= dia_f:
-                dias_prazo = (30 - dia_hoje) + dia_v
-                status_ciclo = "Fatura recém-fechada (máximo prazo)"
-            else:
-                dias_prazo = dia_v - dia_hoje if dia_v > dia_hoje else (30 - dia_hoje) + dia_v
-                status_ciclo = f"Fecha dia {dia_f}"
-            return pd.Series([lim_lib, dias_prazo, status_ciclo])
-
-        cartoes_disp[["lim_real", "dias_prazo", "status_ciclo"]] = cartoes_disp.apply(score_cartao, axis=1)
-        cartoes_validos = cartoes_disp[cartoes_disp["lim_real"] >= 50.0].sort_values(by=["dias_prazo", "lim_real"], ascending=[False, False])
-        if not cartoes_validos.empty:
-            melhor_cartao_row = cartoes_validos.iloc[0]
-
-    # Monta orientação precisa de onde tirar Gasolina (R$ 30/dia) e Pedágio (R$ 25,60/dia)
-    resumo_valores_aloc = (
-        f"{tag_origem_aloc}:<br>"
-        f"• <strong>Gasolina do Mês:</strong> R$ {gasto_gas_mensal_aloc:,.2f} (R$ 30,00/dia)<br>"
-        f"• <strong>Pedágios do Mês:</strong> R$ {gasto_ped_mensal_aloc:,.2f} (R$ 25,60/dia)<br>"
-        f"• <strong>Capital de Giro Necessário:</strong> R$ {custo_operacional_aloc:,.2f} • <strong>Seu Lucro Livre:</strong> <span style='color:#4ade80;'>R$ {lucro_liq_mensal_aloc:,.2f}</span><br><br>"
-    )
-
-    if melhor_conta_gas is not None and float(melhor_conta_gas["saldo_conta"]) >= gasto_gas_mensal_aloc and melhor_cartao_row is not None and float(melhor_cartao_row["lim_real"]) >= gasto_ped_mensal_aloc:
-        orientacao_fonte = (
-            f"<strong>✅ Divisão Ideal (Zero Juros):</strong><br>"
-            f"1. <strong>Gasolina (R$ {gasto_gas_mensal_aloc:,.2f}):</strong> Tire à vista no Pix/Débito da conta <strong>{melhor_conta_gas['banco']}</strong> (saldo atual: R$ {melhor_conta_gas['saldo_conta']:,.2f}).<br>"
-            f"2. <strong>Pedágios (R$ {gasto_ped_mensal_aloc:,.2f}):</strong> Passe no <strong>Cartão {melhor_cartao_row['banco']}</strong> (limite livre: R$ {melhor_cartao_row['lim_real']:,.2f} • {melhor_cartao_row['status_ciclo']}, vence dia {int(melhor_cartao_row['dia_vencimento'])}).<br>"
-            f"3. <strong>Quando cair o reembolso (R$ {reemb_tot_mensal_aloc:,.2f}):</strong> Abata R$ {gasto_ped_mensal_aloc:,.2f} na fatura do {melhor_cartao_row['banco']}, reponha R$ {gasto_gas_mensal_aloc:,.2f} no {melhor_conta_gas['banco']} e embolse <strong>R$ {lucro_liq_mensal_aloc:,.2f}</strong> livres!"
-        )
-        tipo_est = "success"
-    elif melhor_cartao_row is not None and float(melhor_cartao_row["lim_real"]) >= custo_operacional_aloc:
-        orientacao_fonte = (
-            f"<strong>💳 Concentre Tudo no Cartão {melhor_cartao_row['banco']} (Sem Juros):</strong><br>"
-            f"Seu saldo em conta corrente (R$ {total_saldos:,.2f}) não cobre toda a gasolina à vista, mas o <strong>Cartão {melhor_cartao_row['banco']}</strong> tem "
-            f"<strong>R$ {melhor_cartao_row['lim_real']:,.2f}</strong> de limite livre e {melhor_cartao_row['status_ciclo']} (vence dia {int(melhor_cartao_row['dia_vencimento'])}).<br>"
-            f"• Passe tanto os <strong>Pedágios (R$ {gasto_ped_mensal_aloc:,.2f})</strong> quanto a <strong>Gasolina (R$ {gasto_gas_mensal_aloc:,.2f})</strong> nele, evitando o Cheque Especial.<br>"
-            f"• Quando entrar o reembolso (R$ {reemb_tot_mensal_aloc:,.2f}), destine <strong>R$ {custo_operacional_aloc:,.2f}</strong> direto para abater essa fatura e fique com <strong>R$ {lucro_liq_mensal_aloc:,.2f}</strong> livres."
-        )
-        tipo_est = "info"
-    elif melhor_cartao_row is not None:
-        lim_c_disp = float(melhor_cartao_row["lim_real"])
-        falta_cobertura = max(0.0, custo_operacional_aloc - (total_saldos + lim_c_disp))
-        orientacao_fonte = (
-            f"<strong>⚖️ Estratégia Híbrida (Cartão + Conta):</strong><br>"
-            f"• Use os <strong>R$ {lim_c_disp:,.2f}</strong> disponíveis no <strong>Cartão {melhor_cartao_row['banco']}</strong> para cobrir os Pedágios (R$ {gasto_ped_mensal_aloc:,.2f}).<br>"
-            f"• Para a Gasolina (R$ {gasto_gas_mensal_aloc:,.2f}), use seu saldo em conta (R$ {total_saldos:,.2f})."
-            + (f" Apenas se faltar <strong>R$ {falta_cobertura:,.2f}</strong> antes do reembolso cair, use o Cheque Especial de menor taxa por poucos dias." if falta_cobertura > 0 else "")
-        )
-        tipo_est = "warning"
-    else:
-        orientacao_fonte = (
-            f"<strong>⚠️ Atenção ao Capital de Giro:</strong> Seus cartões estão sem limite livre suficiente e seu saldo em conta é R$ {total_saldos:,.2f}. "
-            f"Utilize o <strong>Cheque Especial de menor taxa</strong> apenas conforme os dias forem acontecendo (R$ 55,60/dia para gasolina + pedágio) e "
-            f"destine <strong>R$ {custo_operacional_aloc:,.2f}</strong> do reembolso para zerar o limite imediatamente."
-        )
-        tipo_est = "warning"
-
-    diagnosticos.append({
-        "titulo": "⛽ Plano Mensal de Gasolina & Pedágio (Alocações):",
-        "tipo": tipo_est,
-        "desc": resumo_valores_aloc + orientacao_fonte
-    })
-
-    for idx_dg, diag in enumerate(diagnosticos):
-        cor_borda = "#38bdf8"
-        if diag["tipo"] == "danger": cor_borda = "#f87171"
-        elif diag["tipo"] == "warning": cor_borda = "#fbbf24"
-        elif diag["tipo"] == "success": cor_borda = "#4ade80"
-        with st.expander(diag["titulo"], expanded=False):
-            st.markdown(
-                f'<div style="background:#0d1522;border-left:4px solid {cor_borda};border-radius:8px;padding:10px;font-size:0.72rem;color:#cbd5e1;line-height:1.45;">{diag["desc"]}</div>',
-                unsafe_allow_html=True
-            )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.bloco_ativo == "vencimentos":
-    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-    c_tit, c_fech = st.columns([5, 1])
-    with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.9rem;">💳 Vencimento & Fechamento das Faturas</span>', unsafe_allow_html=True)
-    with c_fech:
-        if st.button("✕", key="fechar_venc"):
-            st.session_state.bloco_ativo = None
-            st.rerun()
-    
-    bancos_com_cartao = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
-    if not bancos_com_cartao:
-        st.info("Nenhum banco configurado com cartão de crédito. Ative a opção na aba 'Ajustes'.")
-    else:
-        banco_venc = st.selectbox("Selecione o Cartão para Configurar", bancos_com_cartao, key="sel_banco_venc")
-        info_banco = df_bancos[df_bancos["banco"] == banco_venc].iloc[0]
-        
-        c_venc1, c_venc2 = st.columns(2)
-        with c_venc1:
-            dia_fech = st.number_input("Melhor dia de compra (Fechamento)", min_value=1, max_value=31, value=int(info_banco.get("dia_fechamento", 3)))
-        with c_venc2:
-            dia_venc = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=int(info_banco.get("dia_vencimento", 10)))
-            
-        if st.button("💾 Salvar Datas deste Cartão", key="salvar_datas"):
-            atualizar_vencimentos(banco_venc, dia_venc, dia_fech)
-            st.success(f"Datas de {banco_venc} salvas: Fechamento dia {dia_fech} • Vencimento dia {dia_venc}!")
-            st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif st.session_state.bloco_ativo == "graficos":
-    st.markdown('<div class="panel-box">', unsafe_allow_html=True)
-    c_tit, c_fech = st.columns([5, 1])
-    with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">📊 Diagnóstico da Competência (04 a 03)</span>', unsafe_allow_html=True)
-    with c_fech:
-        if st.button("✕", key="fechar_diag_inteligente"):
-            st.session_state.bloco_ativo = None
-            st.rerun()
-
-    dt_ciclo_ini, dt_ciclo_fim, dt_prox_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
-    st.caption(f"Período analisado: **{dt_ciclo_ini.strftime('%d/%m/%Y')}** até **{dt_ciclo_fim.strftime('%d/%m/%Y')}** (Renda dias 03 e 16)")
-
-    tot_saldo = df_bancos["saldo_conta"].sum()
-    tot_faturas = df_bancos[df_bancos["tem_cartao"] == 1]["fatura_atual"].sum()
-    tot_cheque = df_bancos["cheque_especial_usado"].sum()
-    
-    # Filtra previsões do ciclo 03 a 03
-    entradas_prev_base = 0.0
-    tot_saidas_mes = 0.0
-    if not df_prev.empty:
-        for _, r in df_prev.iterrows():
-            try:
-                d_obj = datetime.strptime(r["data_prevista"], "%Y-%m-%d").date()
-                if dt_ciclo_ini <= d_obj <= dt_ciclo_fim:
-                    if r["tipo"] == "Entrada":
-                        entradas_prev_base += float(r["valor"])
-                    else:
-                        tot_saidas_mes += float(r["valor"])
-            except:
-                pass
-
-    entradas_reemb_total = 0.0
-    if not df_reemb_itens.empty:
-        for _, r in df_reemb_itens.iterrows():
-            try:
-                d_obj = datetime.strptime(r["data"], "%Y-%m-%d").date()
-                if dt_ciclo_ini <= d_obj <= dt_ciclo_fim:
-                    entradas_reemb_total += float(r["valor"])
-            except:
-                pass
-
-    tot_entradas_mes = entradas_prev_base + entradas_reemb_total
-    saldo_projetado_mes = tot_saldo + tot_entradas_mes - tot_saidas_mes
-    
-    tot_parc_mes = df_parc["valor_parcela"].sum() if not df_parc.empty else 0.0
-    tot_restante_parc = sum((r["total_parcelas"] - r["parcela_atual"]) * r["valor_parcela"] for _, r in df_parc.iterrows()) if not df_parc.empty else 0.0
-
-    st.markdown(f'''
-    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin: 8px 0 12px 0;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #94a3b8; font-weight: 700;">SALDO TOTAL EM CONTA</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #ffffff;">R$ {tot_saldo:,.2f}</div>
-            </div>
-            <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #f87171; font-weight: 700;">FATURAS DE CARTÃO</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #f87171;">R$ {tot_faturas:,.2f}</div>
-            </div>
-            <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">ENTRADAS DO CICLO</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: #4ade80;">+ R$ {tot_entradas_mes:,.2f}</div>
-            </div>
-            <div style="background: #111a28; padding: 8px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 700;">PROJEÇÃO ATÉ DIA 03</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 0.95rem; font-weight: 800; color: {'#4ade80' if saldo_projetado_mes >= 0 else '#f87171'};">
-                    R$ {saldo_projetado_mes:,.2f}
-                </div>
-            </div>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.66rem; color: #94a3b8; margin-top: 8px; padding-top: 6px; border-top: 1px solid #1c2a3d;">
-            <span>Cheque Especial: <strong style="color: {'#f87171' if tot_cheque > 0 else '#4ade80'};">R$ {tot_cheque:,.2f}</strong></span>
-            <span>Parcelas no Ciclo: <strong style="color: #fbbf24;">R$ {tot_parc_mes:,.2f}</strong></span>
-        </div>
-    </div>
-    ''', unsafe_allow_html=True)
-
-    diagnosticos = []
-    if tot_cheque > 0:
-        diagnosticos.append({
-            "titulo": "Eliminação de Cheque Especial",
-            "tipo": "danger",
-            "desc": f"Existe saldo emergencial em uso de R$ {tot_cheque:,.2f}. Use o recebimento do dia 03 ou 16 (ou reembolsos KM) para zerar este limite antes de qualquer gasto variável."
-        })
-    else:
-        diagnosticos.append({
-            "titulo": "Cheque Especial Preservado",
-            "tipo": "success",
-            "desc": "Nenhuma conta está pagando juros emergenciais neste ciclo."
-        })
-        
-    if tot_faturas > (tot_saldo + tot_entradas_mes):
-        deficit = tot_faturas - (tot_saldo + tot_entradas_mes)
-        diagnosticos.append({
-            "titulo": "Risco de Financiamento de Fatura",
-            "tipo": "danger",
-            "desc": f"Suas faturas (R$ {tot_faturas:,.2f}) superam sua liquidez projetada até o dia 03 em R$ {deficit:,.2f}. Evite passar novas despesas no crédito e priorize o abatimento direto."
-        })
-    else:
-        diagnosticos.append({
-            "titulo": "Cobertura Integral das Faturas",
-            "tipo": "success",
-            "desc": "A soma do saldo atual com as entradas dos dias 03 e 16 cobre 100% das faturas deste fechamento."
-        })
-        
-    if tot_entradas_mes > 0:
-        pct_parc = (tot_parc_mes / tot_entradas_mes) * 100
-        if pct_parc > 35:
-            diagnosticos.append({
-                "titulo": "Comprometimento de Renda em Parcelas",
-                "tipo": "warning",
-                "desc": f"As parcelas somam R$ {tot_parc_mes:,.2f} ({pct_parc:.1f}% das entradas do ciclo). Evite novos parcelamentos até liquidar parte do saldo restante (R$ {tot_restante_parc:,.2f})."
-            })
-
-    st.markdown('<div style="font-size: 0.74rem; font-weight: 800; color: #ffffff; margin-bottom: 6px;">📋 O QUE VOCÊ DEVE FAZER:</div>', unsafe_allow_html=True)
-    for d in diagnosticos:
-        cor_borda = "#ef4444" if d["tipo"] == "danger" else ("#fbbf24" if d["tipo"] == "warning" else "#22c55e")
-        st.markdown(f'''
-        <div style="background: #0d1522; border-left: 4px solid {cor_borda}; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px;">
-            <div style="font-size: 0.78rem; font-weight: 700; color: #ffffff;">{d['titulo']}</div>
-            <div style="font-size: 0.68rem; color: #94a3b8; line-height: 1.3; margin-top: 2px;">{d['desc']}</div>
-        </div>
-        ''', unsafe_allow_html=True)
-
-    st.markdown('<div style="font-size: 0.74rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">📤 EXPORTAR OU ENVIAR:</div>', unsafe_allow_html=True)
-
-    pdf_bytes = gerar_relatorio_pdf(df_bancos, tot_entradas_mes, tot_saidas_mes, saldo_projetado_mes, tot_parc_mes, tot_restante_parc, diagnosticos)
-    
-    texto_whatsapp = (
-        f"*RELATÓRIO FINANCEIRO (CICLO {dt_ciclo_ini.strftime('%d/%m')} a {dt_ciclo_fim.strftime('%d/%m')})*\\n"
-        f"Gerado em: {datetime.now().strftime('%d/%m/%Y às %H:%M')}\\n\\n"
-        f"• *Saldo em Conta:* R$ {tot_saldo:,.2f}\\n"
-        f"• *Faturas Totais:* R$ {tot_faturas:,.2f}\\n"
-        f"• *Cheque Especial em Uso:* R$ {tot_cheque:,.2f}\\n"
-        f"• *Entradas do Ciclo (03 e 16):* R$ {tot_entradas_mes:,.2f}\\n"
-        f"• *Saídas Previstas:* R$ {tot_saidas_mes:,.2f}\\n"
-        f"• *Projeção até dia 03:* R$ {saldo_projetado_mes:,.2f}\\n"
-        f"• *Parcelas no Ciclo:* R$ {tot_parc_mes:,.2f} (Restante: R$ {tot_restante_parc:,.2f})\\n\\n"
-        f"*DIAGNÓSTICO E AÇÕES:*\\n"
-    )
-    for d in diagnosticos:
-        texto_whatsapp += f"- {d['titulo']}: {d['desc']}\\n"
-
-    url_whatsapp = "https://api.whatsapp.com/send?text=" + urllib.parse.quote(texto_whatsapp)
-
-    col_exp1, col_exp2 = st.columns(2)
-    with col_exp1:
-        st.download_button(
-            label="📄 Baixar Relatório (PDF)",
-            data=pdf_bytes,
-            file_name=f"relatorio_ciclo_{dt_ciclo_ini.strftime('%Y_%m_%d')}.pdf",
-            mime="application/pdf",
-            key="btn_download_relatorio_pdf"
-        )
-    with col_exp2:
-        st.markdown(f'''
-        <a href="{url_whatsapp}" target="_blank" style="text-decoration: none;">
-            <button style="width: 100%; min-height: 38px; background: #25d366; color: white; border: none; border-radius: 10px; font-weight: 700; font-size: 0.74rem; cursor: pointer;">
-                📲 Enviar p/ WhatsApp
-            </button>
-        </a>
-        ''', unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# Abas Principais (Com aba 'Parcelas' ao lado de 'Bancos')
-tab_bancos, tab_parcelas, tab_extrato, tab_novo, tab_ajustes = st.tabs([
-    "Bancos",
-    "Parcelas", 
-    "Extrato Completo", 
-    "Lançar", 
-    "Ajustes"
-])
-
-with tab_bancos:
-    st.markdown('<div class="sec-header">Contas & Cartões</div>', unsafe_allow_html=True)
-    
-    for _, b in df_bancos.iterrows():
-        b_saldo = b["saldo_conta"]
-        msg_banco, cls_banco = get_status_saldo(b_saldo)
-        tem_cartao = (b.get("tem_cartao", 1) == 1)
-        
-        if tem_cartao:
-            lim_total = b.get("limite_cartao", 0.0)
-            lim_liberado = b.get("limite_liberado", 0.0)
-            lim_exibir = lim_liberado if lim_liberado > 0 else max(0.0, lim_total - b["fatura_atual"])
-            
-            dia_v = int(b.get("dia_vencimento", 10))
-            dia_f = int(b.get("dia_fechamento", 3))
-            
-            st.markdown(f"""
-            <div class="bank-card">
-                <div class="bank-card-top">
-                    <span class="bank-badge">
-                        <span class="bank-dot" style="background-color: {b['cor_identificador']};"></span>
-                        {b['banco']}
-                    </span>
-                    <span class="md-msg-pill {cls_banco}" style="margin-bottom: 0; font-size: 0.65rem;">
-                        {msg_banco}
-                    </span>
-                </div>
-                <div class="bank-grid">
-                    <div class="bank-stat">
-                        <div class="bank-stat-lbl">Saldo Conta</div>
-                        <div class="bank-stat-val">R$ {b_saldo:,.2f}</div>
-                    </div>
-                    <div class="bank-stat">
-                        <div class="bank-stat-lbl">Fatura Cartão</div>
-                        <div class="bank-stat-val" style="color: #38bdf8;">R$ {b['fatura_atual']:,.2f}</div>
-                        <div style="font-size: 0.62rem; color: #64748b; margin-top: 2px;">Vence dia {dia_v} (Fecha {dia_f})</div>
-                    </div>
-                    <div class="bank-stat">
-                        <div class="bank-stat-lbl">Limite do Cartão (Total)</div>
-                        <div class="bank-stat-val" style="color: #cbd5e1; font-size: 0.88rem;">R$ {lim_total:,.2f}</div>
-                    </div>
-                    <div class="bank-stat">
-                        <div class="bank-stat-lbl">Limite Liberado (De Fato)</div>
-                        <div class="bank-stat-val" style="color: #4ade80; font-size: 0.88rem;">R$ {lim_exibir:,.2f}</div>
-                    </div>
-                    <div class="bank-stat-full">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <span class="bank-stat-lbl">Status Cartão</span>
-                                <div style="font-size: 0.75rem; font-weight: 700; color: #94a3b8;">Cartão Ativo</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <span class="bank-stat-lbl">Cheque Especial Usado</span>
-                                <div style="font-family: 'JetBrains Mono'; font-size: 0.85rem; font-weight: 700; color: {'#f87171' if b['cheque_especial_usado'] > 0 else '#94a3b8'};">
-                                    R$ {b['cheque_especial_usado']:,.2f}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            # BANCO SEM CARTÃO
-            st.markdown(f"""
-            <div class="bank-card">
-                <div class="bank-card-top">
-                    <span class="bank-badge">
-                        <span class="bank-dot" style="background-color: {b['cor_identificador']};"></span>
-                        {b['banco']} <span style="font-size: 0.65rem; color: #64748b; font-weight: 500;">(Sem cartão de crédito)</span>
-                    </span>
-                    <span class="md-msg-pill {cls_banco}" style="margin-bottom: 0; font-size: 0.65rem;">
-                        {msg_banco}
-                    </span>
-                </div>
-                <div class="bank-grid-single">
-                    <div class="bank-stat" style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <div class="bank-stat-lbl">Saldo em Conta Corrente</div>
-                            <div class="bank-stat-val" style="font-size: 1.15rem;">R$ {b_saldo:,.2f}</div>
-                        </div>
-                        <div style="text-align: right;">
-                            <div class="bank-stat-lbl">Cheque Especial Usado</div>
-                            <div style="font-family: 'JetBrains Mono'; font-size: 0.9rem; font-weight: 700; color: {'#f87171' if b['cheque_especial_usado'] > 0 else '#94a3b8'};">
-                                R$ {b['cheque_especial_usado']:,.2f}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-# NOVA ABA DE PARCELAS
-with tab_parcelas:
-    st.markdown('<div class="sec-header">Controle de Compras Parceladas</div>', unsafe_allow_html=True)
-    
-    if not df_parc.empty:
-        total_mensal_parcelas = df_parc["valor_parcela"].sum()
-        total_saldo_restante = sum((row["total_parcelas"] - row["parcela_atual"]) * row["valor_parcela"] for _, row in df_parc.iterrows())
-    else:
-        total_mensal_parcelas = 0.0
-        total_saldo_restante = 0.0
-
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ================= CONTEÚDO DAS ABAS DA BARRA INFERIOR =================
+if st.session_state.oled_tab == "Home":
+    if st.session_state.qa_subpanel == "ciclo":
+        render_ciclo_previsoes_box()
+    elif st.session_state.qa_subpanel == "rateio":
+        render_rateio_reembolso_box()
+
+    # 2 Cards Bento OLED (Allocation & Earnings)
+    spark_purple_svg = '<svg width="100%" height="34" viewBox="0 0 140 34" fill="none"><path d="M2 28 C18 24, 24 27, 38 19 C52 11, 60 22, 74 16 C88 10, 96 18, 112 12 C124 8, 132 13, 138 6" stroke="#a855f7" stroke-width="2.2" stroke-linecap="round"/></svg>'
     st.markdown(f"""
-    <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 14px; padding: 12px; margin-bottom: 12px;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 700;">TOTAL PARCELAS ESTE MÊS</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #ffffff;">R$ {total_mensal_parcelas:,.2f}</div>
-            </div>
-            <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #fbbf24; font-weight: 700;">SALDO DEVEDOR RESTANTE</span>
-                <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #fbbf24;">R$ {total_saldo_restante:,.2f}</div>
-            </div>
+    <div class="oled-bento-grid">
+        <div class="oled-card purple-glow">
+            <div class="oled-card-hdr"><span>Allocation</span><span style="color:#71717a;">›</span></div>
+            {spark_purple_svg}
+            <div class="oled-prog-txt" style="margin-top:6px;">Ciclo • <span class="p-purple">{pct_ciclo:.1f}%</span></div>
+        </div>
+        <div class="oled-card cyan-glow">
+            <div class="oled-card-hdr"><span>Earnings</span><span style="color:#71717a;">›</span></div>
+            <div class="oled-card-val">R$ {tot_reembolso_esperado:,.2f}</div>
+            <div class="oled-prog-txt">Meta • <span class="p-cyan">{pct_aloc_meta:.1f}% ({qtd_dias_aloc}d)</span></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    btn_p_label = "➖ Ocultar Formulário" if st.session_state.mostrar_form_parc else "➕ Cadastrar Nova Compra Parcelada"
-    if st.button(btn_p_label, key="toggle_form_parc"):
+    # Allocation Calendar (Matriz interativa de 7 colunas)
+    render_allocation_calendar_widget()
+
+    # Dual Gradient Cards Inferiores (AI Advisor & Vencimentos/PDF)
+    st.markdown(f"""
+    <div class="dual-grad-grid">
+        <div class="grad-card-purple">
+            <div class="grad-card-title"><span>AI Advisor</span><span>›</span></div>
+            <div class="grad-card-sub">Plano gasolina/pedágio & projeção 6 meses</div>
+        </div>
+        <div class="grad-card-cyan">
+            <div class="grad-card-title"><span>Relatório & PDF</span><span>›</span></div>
+            <div class="grad-card-sub">Exportar balanço e resumo WhatsApp</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    g_btn1, g_btn2 = st.columns(2)
+    with g_btn1:
+        if st.button("🧠 Abrir AI Advisor", key="open_adv_home"):
+            st.session_state.oled_tab = "Insights"
+            st.rerun()
+    with g_btn2:
+        if st.button("📄 Gerar PDF / WhatsApp", key="open_pdf_home"):
+            st.session_state.oled_tab = "Insights"
+            st.rerun()
+
+elif st.session_state.oled_tab == "Insights":
+    st.markdown('<div class="alloc-cal-box">', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:0.90rem;font-weight:700;color:#c084fc;margin-bottom:8px;">🧠 AI Advisor • Diagnóstico & Projeção 6 Meses</div>', unsafe_allow_html=True)
+
+    tot_parc_m = float(df_parc["valor_parcela"].sum()) if not df_parc.empty else 0.0
+    tot_div_p = sum(max(0, int(r["total_parcelas"]) - int(r["parcela_atual"])) * float(r["valor_parcela"]) for _, r in df_parc.iterrows()) if not df_parc.empty else 0.0
+
+    proj_6m = []
+    for off in range(6):
+        dt_r = date(st.session_state.cal_ano, st.session_state.cal_mes, 1) + relativedelta(months=off)
+        lbl = f"{meses_nomes[dt_r.month - 1][:3]}/{str(dt_r.year)[2:]}"
+        pa = sum(float(rp["valor_parcela"]) for _, rp in df_parc.iterrows() if (int(rp["parcela_atual"]) + off) <= int(rp["total_parcelas"])) if not df_parc.empty else 0.0
+        sob = renda_futura_livre + max(0.0, tot_parc_m - pa)
+        proj_6m.append((lbl, sob, pa))
+
+    cols_6 = "".join(
+        f'<div style="background:#111115;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:6px 2px;text-align:center;">'
+        f'<div style="font-size:0.58rem;color:#71717a;">{m}</div>'
+        f'<div style="font-family:JetBrains Mono;font-size:0.66rem;font-weight:700;color:{"#34d399" if s>=0 else "#fb7185"};">{"+" if s>=0 else ""}{s:,.0f}</div>'
+        f'<div style="font-size:0.50rem;color:#52525b;">P:{p:,.0f}</div></div>'
+        for m, s, p in proj_6m
+    )
+    st.markdown(f'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:10px;">{cols_6}</div>', unsafe_allow_html=True)
+
+    with st.expander("⛽ Plano Gasolina & Pedágio (Alocações)", expanded=False):
+        contas_s = df_bancos[df_bancos["saldo_conta"] > 0].sort_values(by="saldo_conta", ascending=False)
+        m_conta = contas_s.iloc[0]["banco"] if not contas_s.empty else "Sem saldo em conta"
+        cartoes_d = df_bancos[df_bancos["tem_cartao"] == 1].copy()
+        m_card = "Sem limite livre"
+        if not cartoes_d.empty:
+            cartoes_d["lr"] = cartoes_d.apply(lambda r: float(r["limite_liberado"]) if float(r["limite_liberado"]) > 0 else max(0.0, float(r["limite_cartao"]) - float(r["fatura_atual"])), axis=1)
+            val_c = cartoes_d[cartoes_d["lr"] >= 50.0].sort_values(by="lr", ascending=False)
+            if not val_c.empty: m_card = val_c.iloc[0]["banco"]
+        st.markdown(f"• **Dias marcados:** {qtd_dias_aloc}d · **Gasolina:** R$ {tot_gas_mes:,.2f} · **Pedágio:** R$ {tot_ped_mes:,.2f}<br>• **Fonte Gasolina:** {m_conta}<br>• **Cartão Pedágio:** {m_card}", unsafe_allow_html=True)
+
+    with st.expander("🔍 Onde Está Perdendo Dinheiro & Plano 3 Passos", expanded=False):
+        if total_cheque > 0:
+            st.warning(f"Cheque Especial em uso: R$ {total_cheque:,.2f} (~R$ {total_cheque*0.08:,.2f}/mês de juros). Zere como prioridade #1.")
+        else:
+            st.success("Cheque Especial zerado!")
+        st.info(f"Parcelas ativas: R$ {tot_parc_m:,.2f}/mês (restante total: R$ {tot_div_p:,.2f}).")
+
+    # Exportação PDF e WhatsApp
+    diags_pdf = [{"titulo": "Balanco Consolidado", "desc": f"Saldo R$ {total_saldos:,.2f} | Renda livre R$ {renda_futura_livre:,.2f} | Faturas R$ {total_faturas:,.2f}"}]
+    pdf_bytes = gerar_relatorio_pdf(df_bancos, entradas_futuras_brutas, saidas_comprometidas_ciclo, projecao_com_futuro, tot_parc_m, tot_div_p, diags_pdf)
+    txt_wpp = f"*RELATÓRIO FINANCEIRO ({dt_hero_ini.strftime('%d/%m')} a {dt_hero_fim.strftime('%d/%m')})*\n• Saldo: R$ {total_saldos:,.2f}\n• Renda Futura Livre: R$ {renda_futura_livre:,.2f}\n• Faturas: R$ {total_faturas:,.2f}"
+    ce1, ce2 = st.columns(2)
+    with ce1:
+        st.download_button("📄 Baixar PDF", data=pdf_bytes, file_name=f"relatorio_{dt_hero_ini.strftime('%Y_%m_%d')}.pdf", mime="application/pdf")
+    with ce2:
+        st.markdown(f'<a href="https://api.whatsapp.com/send?text={urllib.parse.quote(txt_wpp)}" target="_blank"><button style="width:100%;height:36px;background:#10b981;color:#000;border:none;border-radius:999px;font-weight:700;font-size:0.72rem;cursor:pointer;">📲 WhatsApp</button></a>', unsafe_allow_html=True)
+
+    # Extrato recolhível
+    cex1, cex2 = st.columns([3.5, 1.5])
+    with cex1: st.markdown(f'<div style="font-size:0.78rem;font-weight:700;color:#a1a1aa;margin-top:10px;">Extrato Completo ({len(df_tx)})</div>', unsafe_allow_html=True)
+    with cex2:
+        if st.button("👁️ Mostrar" if st.session_state.recolher_extrato_lista else "🔼 Recolher", key="btn_toggle_rec_ext"):
+            st.session_state.recolher_extrato_lista = not st.session_state.recolher_extrato_lista
+            st.rerun()
+    if st.session_state.recolher_extrato_lista:
+        st.caption(f"Extrato recolhido ({len(df_tx)} lançamentos).")
+    else:
+        for _, row in df_tx.iterrows():
+            is_s = row["tipo"] == "Saída"
+            st.markdown(f'<div class="oled-list-item"><div><strong style="font-size:0.76rem;">{row["descricao"]}</strong><br><span style="font-size:0.62rem;color:#71717a;">{row["data"]} · {row["banco"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{"#fb7185" if is_s else "#34d399"};font-size:0.80rem;">{"-" if is_s else "+"}R$ {row["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+elif st.session_state.oled_tab == "Cards":
+    st.markdown('<div class="alloc-cal-box">', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:0.88rem;font-weight:700;color:#ffffff;margin-bottom:8px;">💳 Bancos & Compras Parceladas</div>', unsafe_allow_html=True)
+
+    for _, b in df_bancos.iterrows():
+        tem_c = (b.get("tem_cartao", 1) == 1)
+        lim_t = float(b.get("limite_cartao", 0.0))
+        lim_l = float(b.get("limite_liberado", 0.0))
+        lim_ex = lim_l if lim_l > 0 else max(0.0, lim_t - float(b["fatura_atual"]))
+        st.markdown(f"""
+        <div class="oled-list-item" style="border-left:3px solid {b['cor_identificador']};">
+            <div>
+                <strong style="font-size:0.82rem;">{b['banco']}</strong><br>
+                <span style="font-size:0.64rem;color:#a1a1aa;">Saldo: R$ {b['saldo_conta']:,.2f} {f'· Fatura: R$ {b["fatura_atual"]:,.2f} (Venc {int(b.get("dia_vencimento",10))})' if tem_c else ''}</span>
+            </div>
+            <div style="text-align:right;font-family:JetBrains Mono;font-size:0.76rem;">
+                {f'<span style="color:#34d399;font-weight:700;">Livre: R$ {lim_ex:,.2f}</span>' if tem_c else '<span style="color:#71717a;">Conta</span>'}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Parcelas recolhíveis
+    if st.button("➖ Ocultar Formulário" if st.session_state.mostrar_form_parc else "➕ Nova Compra Parcelada", key="toggle_form_parc"):
         st.session_state.mostrar_form_parc = not st.session_state.mostrar_form_parc
         st.rerun()
 
     if st.session_state.mostrar_form_parc:
-        with st.form("form_add_parcela"):
-            st.markdown('<div style="font-size: 0.78rem; font-weight: 800; color: #38bdf8; margin-bottom: 8px;">Nova Compra Parcelada:</div>', unsafe_allow_html=True)
-            bancos_cartao_disp = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
-            if not bancos_cartao_disp:
-                bancos_cartao_disp = df_bancos["banco"].tolist()
-
-            c_parc1, c_parc2 = st.columns(2)
-            with c_parc1:
-                banco_p = st.selectbox("Cartão de Crédito", bancos_cartao_disp)
-                p_atual = st.number_input("Parcela Atual (que está pagando)", min_value=1, max_value=60, value=1, step=1)
-                v_parc = st.number_input("Valor da Parcela (R$)", min_value=0.01, value=150.00, step=10.0)
-            with c_parc2:
-                desc_p = st.text_input("Descrição da Compra", value="Compra Parcelada")
-                p_total = st.number_input("Total de Parcelas (ex: 10x)", min_value=1, max_value=60, value=10, step=1)
-                cat_p = st.selectbox("Categoria", ["Eletrônicos", "Casa", "Vestuário", "Veículo", "Saúde", "Outros"])
-
-            if st.form_submit_button("💾 Salvar Compra Parcelada"):
-                adicionar_parcela(banco_p, desc_p, v_parc, p_atual, p_total, cat_p)
+        with st.form("form_add_parc_oled"):
+            b_cards = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist() or df_bancos["banco"].tolist()
+            c1, c2 = st.columns(2)
+            with c1:
+                bp = st.selectbox("Cartão", b_cards)
+                pa = st.number_input("Parcela Atual", 1, 60, 1)
+                vp = st.number_input("Valor Parcela", min_value=0.01, value=150.0, step=10.0)
+            with c2:
+                dp = st.text_input("Descrição", value="Compra Parcelada")
+                pt = st.number_input("Total Parcelas", 1, 60, 10)
+                cp = st.selectbox("Categoria", ["Eletrônicos", "Casa", "Vestuário", "Veículo", "Saúde", "Outros"])
+            if st.form_submit_button("Salvar Parcela"):
+                adicionar_parcela(bp, dp, vp, pa, pt, cp)
                 st.session_state.mostrar_form_parc = False
-                st.success("Compra parcelada cadastrada com sucesso!")
                 st.rerun()
 
-    bancos_cartao_filtro = ["Todos os Cartões"] + df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
-    sel_filtro_cartao = st.selectbox("Filtrar por Cartão:", bancos_cartao_filtro, key="filtro_cartao_parcelas")
-
-    df_parc_filtrado = df_parc if sel_filtro_cartao == "Todos os Cartões" else df_parc[df_parc["banco"] == sel_filtro_cartao]
-
-    c_pl1, c_pl2 = st.columns([3.8, 1.8])
-    with c_pl1:
-        st.markdown(f'<div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 8px 0 4px 0;">Compras Parceladas ({len(df_parc_filtrado)}):</div>', unsafe_allow_html=True)
-    with c_pl2:
-        st.markdown('<div class="btn-action-icon">', unsafe_allow_html=True)
-        lbl_rec_pl = "👁️ Mostrar" if st.session_state.recolher_parc_lista else "🔼 Recolher"
-        if st.button(lbl_rec_pl, key="btn_toggle_rec_pl"):
+    cpl1, cpl2 = st.columns([3.5, 1.5])
+    with cpl1: st.markdown(f'<div style="font-size:0.76rem;font-weight:700;color:#a1a1aa;margin-top:8px;">Parcelas ({len(df_parc)})</div>', unsafe_allow_html=True)
+    with cpl2:
+        if st.button("👁️ Mostrar" if st.session_state.recolher_parc_lista else "🔼 Recolher", key="btn_toggle_rec_pl"):
             st.session_state.recolher_parc_lista = not st.session_state.recolher_parc_lista
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
     if st.session_state.recolher_parc_lista:
-        st.caption(f"Lista de parcelas recolhida ({len(df_parc_filtrado)} compra(s) oculta(s)). Clique em **👁️ Mostrar** para expandir.")
-    elif df_parc_filtrado.empty:
-        st.info("Nenhuma compra parcelada registrada para este cartão.")
+        st.caption(f"Lista recolhida ({len(df_parc)} compra(s)).")
     else:
-        for _, row_pc in df_parc_filtrado.iterrows():
-            p_at = row_pc["parcela_atual"]
-            p_tot = row_pc["total_parcelas"]
-            v_parc_row = row_pc["valor_parcela"]
-            restante_compra = max(0, p_tot - p_at) * v_parc_row
-            pct = min(100.0, (p_at / p_tot) * 100) if p_tot > 0 else 0
-
+        for _, rpc in df_parc.iterrows():
+            pct = min(100.0, (rpc["parcela_atual"] / max(1, rpc["total_parcelas"])) * 100)
             st.markdown(f"""
-            <div class="parcela-card">
-                <div class="parcela-top">
-                    <div>
-                        <span style="font-size: 0.84rem; font-weight: 800; color: #ffffff;">{row_pc['descricao']}</span>
-                        <div style="font-size: 0.65rem; color: #94a3b8;">Cartão {row_pc['banco']} • {row_pc['categoria']}</div>
-                    </div>
-                    <div style="text-align: right;">
-                        <span style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: #38bdf8;">R$ {v_parc_row:,.2f}/mês</span>
-                    </div>
+            <div style="background:#111115;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:10px;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;font-size:0.78rem;">
+                    <strong>{rpc['descricao']} ({rpc['banco']})</strong>
+                    <span style="color:#38bdf8;font-family:JetBrains Mono;font-weight:700;">R$ {rpc['valor_parcela']:,.2f}</span>
                 </div>
-                <div class="parcela-progresso">
-                    <div class="parcela-progresso-bar" style="width: {pct:.1f}%;"></div>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; margin-top: 4px;">
-                    <span style="color: #cbd5e1; font-weight: 700;">Parcela {p_at} de {p_tot} ({pct:.0f}% paga)</span>
-                    <span style="color: #fbbf24; font-weight: 700;">Falta: R$ {restante_compra:,.2f}</span>
-                </div>
-                <div style="font-size: 0.65rem; color: #4ade80; font-weight: 700; margin-top: 3px;">
-                    🏁 Término previsto: {row_pc['mes_ano_fim']}
-                </div>
+                <div class="parcela-progresso"><div class="parcela-progresso-bar" style="width:{pct:.0f}%;"></div></div>
+                <div style="font-size:0.64rem;color:#71717a;">{rpc['parcela_atual']}/{rpc['total_parcelas']} · Fim {rpc['mes_ano_fim']}</div>
             </div>
             """, unsafe_allow_html=True)
-            
-            c_btn_parc1, c_btn_parc2 = st.columns([3, 1])
-            with c_btn_parc1:
-                if p_at < p_tot:
-                    if st.button(f"Pagar +1 Parcela ({p_at + 1}/{p_tot})", key=f"avancar_{row_pc['id']}"):
-                        avancar_parcela(row_pc["id"])
-                        st.rerun()
-                else:
-                    st.caption("✅ Compra 100% quitada!")
-            with c_btn_parc2:
-                st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
-                if st.button("🗑️", key=f"del_parc_{row_pc['id']}", help="Excluir esta compra"):
-                    remover_parcela(row_pc["id"])
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-with tab_extrato:
-    c_ext_t, c_ext_rec, c_ext_b = st.columns([2.6, 1.7, 1.7])
-    with c_ext_t:
-        st.markdown(f'<div class="sec-header" style="margin-top: 0.5rem;">Extrato ({len(df_tx)})</div>', unsafe_allow_html=True)
-    with c_ext_rec:
-        st.markdown('<div class="btn-action-icon" style="margin-top: 0.3rem;">', unsafe_allow_html=True)
-        lbl_rec_ext = "👁️ Mostrar" if st.session_state.recolher_extrato_lista else "🔼 Recolher"
-        if st.button(lbl_rec_ext, key="btn_toggle_rec_ext"):
-            st.session_state.recolher_extrato_lista = not st.session_state.recolher_extrato_lista
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with c_ext_b:
-        st.markdown('<div class="btn-clear" style="margin-top: 0.3rem;">', unsafe_allow_html=True)
-        if st.button("🗑️ Limpar", key="btn_limpar_extrato_aba"):
-            limpar_extrato_completo()
-            st.session_state.editando_tx_id = None
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+elif st.session_state.oled_tab == "Allocation":
+    render_allocation_calendar_widget()
+    render_rateio_reembolso_box()
 
-    # Formulário de Edição de Transação do Extrato
-    if st.session_state.editando_tx_id is not None:
-        tx_edit_df = df_tx[df_tx["id"] == st.session_state.editando_tx_id]
-        if not tx_edit_df.empty:
-            r_tx = tx_edit_df.iloc[0]
-            st.markdown("""
-            <div style="background: #101c2e; border: 1px solid #38bdf8; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
-                <span style="font-size: 0.82rem; font-weight: 800; color: #38bdf8;">✏️ Editando Transação do Extrato</span>
-            """, unsafe_allow_html=True)
-            with st.form("form_editar_tx_extrato"):
-                c_tx1, c_tx2 = st.columns(2)
-                with c_tx1:
-                    tx_desc = st.text_input("Descrição", value=str(r_tx["descricao"]))
-                    tx_val = st.number_input("Valor (R$)", min_value=0.01, value=float(r_tx["valor"]), step=5.0)
-                    tx_tipo = st.selectbox("Tipo", ["Saída", "Entrada"], index=0 if r_tx["tipo"] == "Saída" else 1)
-                with c_tx2:
-                    tx_data = st.text_input("Data", value=str(r_tx["data"]))
-                    b_list = df_bancos["banco"].tolist()
-                    idx_b_tx = b_list.index(r_tx["banco"]) if r_tx["banco"] in b_list else 0
-                    tx_banco = st.selectbox("Banco", b_list, index=idx_b_tx)
-                    meios_list = ["Cartão de Crédito", "Conta Corrente / Pix"]
-                    idx_m_tx = meios_list.index(r_tx["meio"]) if r_tx["meio"] in meios_list else 1
-                    tx_meio = st.selectbox("Método", meios_list, index=idx_m_tx)
-                
-                cats_tx = ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Saúde", "Salário", "Reembolso KM", "OFX / Cartão", "OFX / Conta", "Outros"]
-                idx_c_tx = cats_tx.index(r_tx["categoria"]) if r_tx["categoria"] in cats_tx else len(cats_tx) - 1
-                tx_cat = st.selectbox("Categoria", cats_tx, index=idx_c_tx)
+elif st.session_state.oled_tab == "Settings":
+    st.markdown('<div class="alloc-cal-box">', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:0.88rem;font-weight:700;color:#ffffff;margin-bottom:8px;">⚙️ Configurações de Bancos & Backup</div>', unsafe_allow_html=True)
 
-                c_tx_b1, c_tx_b2 = st.columns(2)
-                with c_tx_b1:
-                    if st.form_submit_button("💾 Salvar Alteração"):
-                        atualizar_transacao_extrato(int(r_tx["id"]), tx_data, tx_desc, tx_val, tx_cat, tx_banco, tx_meio, tx_tipo)
-                        st.session_state.editando_tx_id = None
-                        st.success("Transação atualizada e saldo recalculado!")
-                        st.rerun()
-                with c_tx_b2:
-                    if st.form_submit_button("✕ Cancelar"):
-                        st.session_state.editando_tx_id = None
-                        st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    if st.session_state.recolher_extrato_lista:
-        st.caption(f"Extrato recolhido ({len(df_tx)} transação(ões) oculta(s)). Clique em **👁️ Mostrar** para expandir.")
-    elif df_tx.empty:
-        st.info("Nenhuma transação registrada no extrato.")
-    else:
-        for _, row in df_tx.iterrows():
-            is_saida = row["tipo"] == "Saída"
-            sinal = "-" if is_saida else "+"
-            cor = "#f87171" if is_saida else "#4ade80"
-            c_tx_info, c_tx_acts = st.columns([4, 1.4])
-            with c_tx_info:
-                st.markdown(f"""
-                <div style="background: #121a28; border: 1px solid #1f2d42; border-radius: 14px; padding: 10px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div style="font-size: 0.82rem; font-weight: 700; color: #ffffff;">{row['descricao']}</div>
-                        <div style="font-size: 0.65rem; color: #64748b;">{row['data']} • {row['banco']} ({row['meio']})</div>
-                        <span style="font-size: 0.60rem; background: #1a2538; color: #38bdf8; padding: 2px 6px; border-radius: 4px;">{row['categoria']}</span>
-                    </div>
-                    <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.88rem; color: {cor};">
-                        {sinal} R$ {row['valor']:,.2f}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            with c_tx_acts:
-                c_ed_t, c_dl_t = st.columns(2)
-                with c_ed_t:
-                    st.markdown('<div class="btn-action-icon" style="margin-top: 6px;">', unsafe_allow_html=True)
-                    if st.button("✏️", key=f"ed_tx_{row['id']}", help="Editar lançamento"):
-                        st.session_state.editando_tx_id = int(row["id"])
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                with c_dl_t:
-                    st.markdown('<div class="btn-clear" style="margin-top: 6px;">', unsafe_allow_html=True)
-                    if st.button("🗑️", key=f"dl_tx_{row['id']}", help="Excluir lançamento"):
-                        remover_transacao_extrato(int(row["id"]))
-                        if st.session_state.editando_tx_id == int(row["id"]):
-                            st.session_state.editando_tx_id = None
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-
-with tab_novo:
-    st.markdown('<div class="sec-header">Lançamentos & Importações</div>', unsafe_allow_html=True)
-    
-    modo_lanc = st.radio("Como deseja lançar?", ["✍️ Manual", "📂 Importar Arquivo OFX"], horizontal=True, key="modo_lanc_radio")
-    
-    if modo_lanc == "✍️ Manual":
-        with st.form("form_novo_lanc"):
-            desc = st.text_input("Descrição", value="Mercado / Compra")
-            val = st.number_input("Valor (R$)", value=25.00, min_value=0.01, step=1.0)
-            banco = st.selectbox("Banco", df_bancos["banco"].tolist())
-            
-            info_b = df_bancos[df_bancos["banco"] == banco].iloc[0]
-            opcoes_meio = ["Conta Corrente / Pix"]
-            if info_b.get("tem_cartao", 1) == 1:
-                opcoes_meio.insert(0, "Cartão de Crédito")
-                
-            meio = st.radio("Método", opcoes_meio, horizontal=True)
-            cat = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Saúde", "Outros"])
-            tipo = st.selectbox("Tipo", ["Saída", "Entrada"])
-            
-            if st.form_submit_button("Confirmar Lançamento"):
-                adicionar_transacao(datetime.now().strftime("%d/%m %H:%M"), desc, val, cat, banco, meio, tipo)
-                st.success("Transação registrada com sucesso!")
-                st.rerun()
-                
-    else:
-        st.markdown("""
-        <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 12px; padding: 10px; margin-bottom: 12px;">
-            <span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">📥 IMPORTADOR OFX INTELIGENTE</span>
-            <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 2px; line-height: 1.3;">
-                Suba o arquivo <strong>.OFX</strong> baixado do app do seu banco (extrato de conta corrente ou fatura de cartão de crédito). O sistema lê todas as movimentações e atualiza o saldo ou fatura correspondente automaticamente!
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        tipo_ofx = st.selectbox(
-            "Tipo de Arquivo OFX:", 
-            ["💳 Fatura de Cartão de Crédito", "🏦 Extrato de Conta Corrente"],
-            key="sel_tipo_ofx"
-        )
-        
-        # Filtra bancos pertinentes
-        if "Cartão" in tipo_ofx:
-            bancos_ofx = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist()
-            if not bancos_ofx:
-                bancos_ofx = df_bancos["banco"].tolist()
-        else:
-            bancos_ofx = df_bancos["banco"].tolist()
-            
-        banco_alvo = st.selectbox("Banco Pertencente:", bancos_ofx, key="banco_alvo_ofx")
-        
-        arquivo_ofx = st.file_uploader("Selecione o arquivo .OFX:", type=["ofx"], key="uploader_ofx")
-        
-        if arquivo_ofx is not None:
-            try:
-                raw_bytes = arquivo_ofx.read()
-                try:
-                    conteudo_ofx = raw_bytes.decode("utf-8")
-                except UnicodeDecodeError:
-                    conteudo_ofx = raw_bytes.decode("latin-1", errors="replace")
-                    
-                transacoes_ofx, saldo_ledger = parse_ofx_content(conteudo_ofx)
-                
-                if not transacoes_ofx:
-                    st.warning("Nenhuma movimentação identificada no arquivo OFX. Verifique se o arquivo está no padrão bancário.")
-                else:
-                    # Totais do arquivo
-                    total_debitos = sum(abs(t["valor"]) for t in transacoes_ofx if t["valor"] < 0)
-                    total_creditos = sum(t["valor"] for t in transacoes_ofx if t["valor"] > 0)
-                    
-                    st.markdown(f"""
-                    <div style="background: #111a28; border: 1px solid #1c2a3d; border-radius: 12px; padding: 10px; margin: 10px 0;">
-                        <span style="font-size: 0.75rem; font-weight: 800; color: #ffffff;">📄 Resumo do Arquivo OFX:</span>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px;">
-                            <div style="background: #0c121c; padding: 6px 8px; border-radius: 8px;">
-                                <span style="font-size: 0.6rem; color: #94a3b8;">MOVIMENTAÇÕES</span>
-                                <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: #38bdf8;">{len(transacoes_ofx)} itens</div>
-                            </div>
-                            <div style="background: #0c121c; padding: 6px 8px; border-radius: 8px;">
-                                <span style="font-size: 0.6rem; color: #94a3b8;">{'TOTAL COMPRAS' if 'Cartão' in tipo_ofx else 'TOTAL DÉBITOS'}</span>
-                                <div style="font-family: 'JetBrains Mono'; font-weight: 800; font-size: 0.88rem; color: #f87171;">R$ {total_debitos:,.2f}</div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Opções de atualização
-                    if "Cartão" in tipo_ofx:
-                        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">Ações para o Cartão:</span>', unsafe_allow_html=True)
-                        atualizar_fatura = st.checkbox("Atualizar valor da Fatura deste Cartão com o total do OFX", value=True)
-                        atualizar_extrato_cc = st.checkbox("Gravar todas as compras individuais no Extrato Geral", value=True)
-                        
-                        valor_final_fatura = abs(saldo_ledger) if (saldo_ledger is not None and saldo_ledger != 0) else total_debitos
-                        st.caption(f"Valor a ser definido na fatura de **{banco_alvo}**: **R$ {valor_final_fatura:,.2f}**")
-                        
-                        if st.button("🚀 Processar e Alimentar Cartão", key="btn_proc_cartao_ofx"):
-                            conn = sqlite3.connect("financas.db")
-                            c = conn.cursor()
-                            
-                            if atualizar_fatura:
-                                # Atualiza fatura atual e recalcula limite liberado se aplicável
-                                c.execute("SELECT limite_cartao FROM contas_bancarias WHERE banco = ?", (banco_alvo,))
-                                r_b = c.fetchone()
-                                lim_total = r_b[0] if r_b else 0.0
-                                novo_liberado = max(0.0, lim_total - valor_final_fatura)
-                                c.execute("""
-                                    UPDATE contas_bancarias 
-                                    SET fatura_atual = ?, limite_liberado = ?
-                                    WHERE banco = ?
-                                """, (valor_final_fatura, novo_liberado, banco_alvo))
-                                
-                            if atualizar_extrato_cc:
-                                novos_cc = 0
-                                for tr in transacoes_ofx:
-                                    fitid_val = tr.get("fitid", "")
-                                    c.execute("SELECT COUNT(*) FROM transacoes WHERE fitid = ? AND banco = ? AND meio = 'Cartão de Crédito'", (fitid_val, banco_alvo))
-                                    if c.fetchone()[0] == 0:
-                                        val_trn = abs(tr["valor"])
-                                        tipo_trn = "Saída" if tr["valor"] < 0 else "Entrada"
-                                        c.execute("""
-                                            INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo, fitid)
-                                            VALUES (?, ?, ?, 'OFX / Cartão', ?, 'Cartão de Crédito', ?, ?)
-                                        """, (tr["data"], tr["descricao"], val_trn, banco_alvo, tipo_trn, fitid_val))
-                                        novos_cc += 1
-                                    
-                            conn.commit()
-                            conn.close()
-                            st.success(f"Fatura e compras de {banco_alvo} alimentadas com sucesso pelo OFX!")
-                            st.rerun()
-                            
-                    else:
-                        st.markdown('<span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">Ações para a Conta Corrente:</span>', unsafe_allow_html=True)
-                        atualizar_saldo = st.checkbox("Atualizar Saldo em Conta deste Banco com o saldo do OFX", value=True)
-                        atualizar_extrato_conta = st.checkbox("Gravar movimentações no Extrato Geral", value=True)
-                        
-                        valor_final_saldo = saldo_ledger if saldo_ledger is not None else (total_creditos - total_debitos)
-                        st.caption(f"Saldo a ser definido na conta de **{banco_alvo}**: **R$ {valor_final_saldo:,.2f}**")
-                        
-                        if st.button("🚀 Processar e Alimentar Conta", key="btn_proc_conta_ofx"):
-                            conn = sqlite3.connect("financas.db")
-                            c = conn.cursor()
-                            
-                            if atualizar_saldo:
-                                c.execute("""
-                                    UPDATE contas_bancarias 
-                                    SET saldo_conta = ?
-                                    WHERE banco = ?
-                                """, (valor_final_saldo, banco_alvo))
-                                
-                            if atualizar_extrato_conta:
-                                novos_ct = 0
-                                for tr in transacoes_ofx:
-                                    fitid_val = tr.get("fitid", "")
-                                    c.execute("SELECT COUNT(*) FROM transacoes WHERE fitid = ? AND banco = ? AND meio = 'Conta Corrente / Pix'", (fitid_val, banco_alvo))
-                                    if c.fetchone()[0] == 0:
-                                        val_trn = abs(tr["valor"])
-                                        tipo_trn = "Saída" if tr["valor"] < 0 else "Entrada"
-                                        c.execute("""
-                                            INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo, fitid)
-                                            VALUES (?, ?, ?, 'OFX / Conta', ?, 'Conta Corrente / Pix', ?, ?)
-                                        """, (tr["data"], tr["descricao"], val_trn, banco_alvo, tipo_trn, fitid_val))
-                                        novos_ct += 1
-                                    
-                            conn.commit()
-                            conn.close()
-                            st.success(f"Saldo e movimentações de {banco_alvo} atualizados com sucesso pelo OFX!")
-                            st.rerun()
-                            
-            except Exception as e:
-                st.error(f"Erro ao processar o arquivo OFX: {e}")
-
-with tab_ajustes:
-    st.markdown('<div class="sec-header">Ajuste de Limites, Saldos & Cartões</div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="btn-clear" style="margin-bottom: 12px;">', unsafe_allow_html=True)
-    if st.button("⚠️ Zerar Todos os Saldos e Faturas", key="btn_zerar_saldos_tudo"):
+    st.markdown('<div class="btn-clear" style="margin-bottom:8px;">', unsafe_allow_html=True)
+    if st.button("⚠️ Zerar Saldos e Faturas", key="btn_zerar_oled"):
         zerar_saldos_e_faturas()
-        st.success("Saldos e faturas zerados!")
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    banco_edit = st.selectbox("Selecione o Banco para Configurar", df_bancos["banco"].tolist())
-    row_banco = df_bancos[df_bancos["banco"] == banco_edit].iloc[0]
-    
-    with st.form("form_edit_saldo"):
-        st.markdown(f'<div style="font-weight: 800; color: #38bdf8; margin-bottom: 8px;">Configurações de {banco_edit}</div>', unsafe_allow_html=True)
-        
-        possui_cartao = st.checkbox("💳 Possui Cartão de Crédito neste banco?", value=bool(row_banco.get("tem_cartao", 1)))
-        
-        novo_saldo = st.number_input("Saldo em Conta Corrente (R$)", value=float(row_banco["saldo_conta"]), step=10.0)
-        lim_ch = st.number_input("Limite Cheque Especial (R$)", value=float(row_banco["limite_cheque_especial"]), step=100.0)
-        ch_usado = st.number_input("Cheque Especial Usado (R$)", value=float(row_banco["cheque_especial_usado"]), step=10.0)
-        
-        if possui_cartao:
-            st.markdown('<div style="font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-top: 10px;">Dados do Cartão de Crédito:</div>', unsafe_allow_html=True)
-            c_crd1, c_crd2 = st.columns(2)
-            with c_crd1:
-                novo_lim = st.number_input("Limite Total do Cartão (R$)", value=float(row_banco["limite_cartao"]), step=100.0)
-                nova_fat = st.number_input("Fatura Atual (R$)", value=float(row_banco["fatura_atual"]), step=10.0)
-                dia_v = st.number_input("Dia do Vencimento", min_value=1, max_value=31, value=int(row_banco.get("dia_vencimento", 10)))
-            with c_crd2:
-                lim_lib_padrao = float(row_banco.get("limite_liberado", 0.0))
-                if lim_lib_padrao == 0.0 and novo_lim > 0:
-                    lim_lib_padrao = max(0.0, novo_lim - nova_fat)
-                novo_lim_liberado = st.number_input("Limite Liberado (De Fato) (R$)", value=lim_lib_padrao, step=100.0)
-                dia_f = st.number_input("Dia de Fechamento", min_value=1, max_value=31, value=int(row_banco.get("dia_fechamento", 3)))
+
+    banco_edit = st.selectbox("Banco", df_bancos["banco"].tolist())
+    row_b = df_bancos[df_bancos["banco"] == banco_edit].iloc[0]
+    with st.form("form_cfg_oled"):
+        possui_c = st.checkbox("💳 Possui Cartão de Crédito?", value=bool(row_b.get("tem_cartao", 1)))
+        n_sal = st.number_input("Saldo Conta (R$)", value=float(row_b["saldo_conta"]), step=10.0)
+        l_chq = st.number_input("Limite Cheque Especial (R$)", value=float(row_b["limite_cheque_especial"]), step=100.0)
+        u_chq = st.number_input("Cheque Especial Usado (R$)", value=float(row_b["cheque_especial_usado"]), step=10.0)
+        if possui_c:
+            c1, c2 = st.columns(2)
+            with c1:
+                n_lim = st.number_input("Limite Total", value=float(row_b["limite_cartao"]), step=100.0)
+                n_fat = st.number_input("Fatura Atual", value=float(row_b["fatura_atual"]), step=10.0)
+                d_ven = st.number_input("Vencimento", 1, 31, int(row_b.get("dia_vencimento", 10)))
+            with c2:
+                n_lib = st.number_input("Limite Liberado", value=float(row_b.get("limite_liberado", 0.0)), step=100.0)
+                d_fec = st.number_input("Fechamento", 1, 31, int(row_b.get("dia_fechamento", 3)))
         else:
-            nova_fat = 0.0
-            novo_lim = 0.0
-            novo_lim_liberado = 0.0
-            dia_v = int(row_banco.get("dia_vencimento", 10))
-            dia_f = int(row_banco.get("dia_fechamento", 3))
-            st.caption("ℹ️ Este banco não possui cartão. A tela principal ocultará a seção de fatura e limites.")
-        
-        if st.form_submit_button("Salvar Configurações"):
-            atualizar_banco_completo(
-                banco_edit, 
-                1 if possui_cartao else 0, 
-                nova_fat, 
-                novo_lim, 
-                novo_lim_liberado,
-                novo_saldo, 
-                lim_ch, 
-                ch_usado, 
-                dia_v, 
-                dia_f
-            )
-            st.success("Configurações atualizadas!")
+            n_lim, n_fat, n_lib, d_ven, d_fec = 0.0, 0.0, 0.0, 10, 3
+        if st.form_submit_button("💾 Salvar Configurações"):
+            atualizar_banco_completo(banco_edit, 1 if possui_c else 0, n_fat, n_lim, n_lib, n_sal, l_chq, u_chq, d_ven, d_fec)
+            st.success("Salvo!")
             st.rerun()
 
-
-    st.markdown('<div class="sec-header" style="margin-top: 1.4rem;">Backup & Segurança dos Dados</div>', unsafe_allow_html=True)
-    c_bk1, c_bk2 = st.columns(2)
-    with c_bk1:
+    st.markdown('<div style="font-size:0.80rem;font-weight:700;color:#a1a1aa;margin:12px 0 6px 0;">Backup (.db)</div>', unsafe_allow_html=True)
+    cb1, cb2 = st.columns(2)
+    with cb1:
         if os.path.exists("financas.db"):
             with open("financas.db", "rb") as f_db:
-                db_bytes = f_db.read()
-            st.download_button(
-                label="📥 Baixar Backup (.db)",
-                data=db_bytes,
-                file_name=f"backup_financas_{datetime.now().strftime('%Y_%m_%d')}.db",
-                mime="application/octet-stream",
-                key="btn_download_backup_db"
-            )
-    with c_bk2:
-        up_db = st.file_uploader("Restaurar Backup (.db)", type=["db"], key="uploader_restore_db", label_visibility="collapsed")
-        if up_db is not None:
-            if st.button("📤 Restaurar Arquivo", key="btn_confirm_restore_db"):
-                with open("financas.db", "wb") as f_out:
-                    f_out.write(up_db.read())
-                st.success("Banco de dados restaurado com sucesso!")
-                st.rerun()
+                st.download_button("📥 Baixar .db", data=f_db.read(), file_name=f"backup_financas_{datetime.now().strftime('%Y_%m_%d')}.db", mime="application/octet-stream")
+    with cb2:
+        up_db = st.file_uploader("Restaurar .db", type=["db"], label_visibility="collapsed")
+        if up_db is not None and st.button("📤 Restaurar"):
+            with open("financas.db", "wb") as f_out:
+                f_out.write(up_db.read())
+            st.success("Restaurado!")
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ================= BOTTOM NAVIGATION BAR (5 ABAS) =================
+st.markdown('<div class="bottom-nav-wrap">', unsafe_allow_html=True)
+bn1, bn2, bn3, bn4, bn5 = st.columns(5)
+nav_items = [
+    (bn1, "🏠\nHome", "Home"),
+    (bn2, "📊\nInsights", "Insights"),
+    (bn3, "💳\nCards", "Cards"),
+    (bn4, "🎯\nAllocation", "Allocation"),
+    (bn5, "⚙️\nSettings", "Settings")
+]
+for col_n, lbl_n, tab_key in nav_items:
+    with col_n:
+        if st.button(lbl_n, key=f"bnav_{tab_key}", type="primary" if st.session_state.oled_tab == tab_key else "secondary"):
+            st.session_state.oled_tab = tab_key
+            st.session_state.recolher_lanc_ciclo = True
+            st.session_state.recolher_dest_reemb = True
+            st.session_state.recolher_parc_lista = True
+            st.session_state.recolher_extrato_lista = True
+            st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
