@@ -1367,18 +1367,21 @@ if st.session_state.bloco_ativo == "previstos":
     entradas_prev_base = df_prev_ciclo[df_prev_ciclo["tipo"] == "Entrada"]["valor"].sum() if not df_prev_ciclo.empty else 0.0
     saidas_prev_base = df_prev_ciclo[df_prev_ciclo["tipo"] == "Saída"]["valor"].sum() if not df_prev_ciclo.empty else 0.0
 
+    reemb_total_ciclo = 0.0
     reemb_livre_ciclo = 0.0
     reemb_comprometido_ciclo = 0.0
     if not df_reemb_ciclo.empty:
         for _, rr_c in df_reemb_ciclo.iterrows():
+            v_rr = float(rr_c["valor"])
+            reemb_total_ciclo += v_rr
             if rr_c["acao"] == "Creditar em Conta Corrente":
-                reemb_livre_ciclo += float(rr_c["valor"])
+                reemb_livre_ciclo += v_rr
             else:
-                reemb_comprometido_ciclo += float(rr_c["valor"])
+                reemb_comprometido_ciclo += v_rr
 
-    # Entradas reais livres = salários/rendas + reembolsos sem destinação de dívida (Conta Corrente)
-    entradas_previstas = entradas_prev_base + reemb_livre_ciclo
-    # Saídas/Comprometimentos = contas a pagar + reembolsos já carimbados para pagar cartão/cheque especial
+    # Tudo que entra de fato entra (Salários + Total de Reembolsos)
+    entradas_previstas = entradas_prev_base + reemb_total_ciclo
+    # E o que já sai destinado entra nas saídas/destinados (Contas a pagar + Reembolsos destinados a cartão/cheque)
     saidas_previstas = saidas_prev_base + reemb_comprometido_ciclo
     saldo_projetado = total_saldos + entradas_previstas - saidas_previstas
 
@@ -1388,11 +1391,11 @@ if st.session_state.bloco_ativo == "previstos":
         <div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Balanço {nome_mes_comp} ({dt_ciclo_ini.strftime('%d/%m')} a {dt_ciclo_fim.strftime('%d/%m')})</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
             <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">ENTRADA LIVRE A RECEBER</span>
+                <span style="font-size: 0.62rem; color: #4ade80; font-weight: 700;">TOTAL A RECEBER (BRUTO)</span>
                 <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #4ade80;">+ R$ {entradas_previstas:,.2f}</div>
             </div>
             <div style="background: #111a28; padding: 8px 10px; border-radius: 10px; border: 1px solid #1c2a3d;">
-                <span style="font-size: 0.62rem; color: #f87171; font-weight: 700;">SAÍDAS / DESTINADOS</span>
+                <span style="font-size: 0.62rem; color: #f87171; font-weight: 700;">SAÍDAS + DESTINADOS</span>
                 <div style="font-family: 'JetBrains Mono'; font-size: 1.0rem; font-weight: 800; color: #f87171;">- R$ {saidas_previstas:,.2f}</div>
             </div>
         </div>
@@ -1448,21 +1451,51 @@ if st.session_state.bloco_ativo == "previstos":
                 pass
 
     if not df_reemb_itens.empty:
+        # Agrupa o total de reembolso que entra em cada data (para mostrar a entrada real + o destino que sai)
+        reemb_por_data_rows = {}
         for _, row_r in df_reemb_itens.iterrows():
             try:
                 dt_r = datetime.strptime(row_r["data"], "%Y-%m-%d").date()
                 if dt_full_ini <= dt_r <= dt_full_fim:
-                    is_sem_destino_pgto = (row_r["acao"] == "Creditar em Conta Corrente")
-                    eventos_por_data.setdefault(dt_r, []).append({
-                        "descricao": f"⛽ Reembolso: {row_r['motivo']}",
-                        "valor": row_r["valor"],
-                        "tipo": "Entrada" if is_sem_destino_pgto else "Saída",
-                        "papel_cal": "ReembSemDestino" if is_sem_destino_pgto else "SaidaComprometida",
-                        "banco": row_r["banco"],
-                        "is_reembolso": True
-                    })
+                    reemb_por_data_rows.setdefault(dt_r, []).append(row_r)
             except:
                 pass
+
+        for dt_r, lista_r in reemb_por_data_rows.items():
+            # 1) Registra a entrada do reembolso naquela data:
+            #    - Se houver parte destinada a pagamento, mostra a entrada que cobriu os destinos em verde (`+soma_destinada`)
+            #    - Cada item sem destinação (Conta Corrente) entra em amarelo (`+valor`)
+            soma_destinada_dia = sum(float(x["valor"]) for x in lista_r if x["acao"] != "Creditar em Conta Corrente")
+            if soma_destinada_dia > 0:
+                eventos_por_data.setdefault(dt_r, []).append({
+                    "descricao": "⛽ Entrada Reembolso (Para Destinos)",
+                    "valor": soma_destinada_dia,
+                    "tipo": "Entrada",
+                    "papel_cal": "EntradaCobertura",
+                    "banco": "Reembolso",
+                    "is_reembolso": True
+                })
+            for r_item in lista_r:
+                if r_item["acao"] == "Creditar em Conta Corrente":
+                    # Entrada sem destinação de pagamento -> linha amarela
+                    eventos_por_data.setdefault(dt_r, []).append({
+                        "descricao": f"⛽ Reembolso s/ Destinação: {r_item['motivo']}",
+                        "valor": r_item["valor"],
+                        "tipo": "Entrada",
+                        "papel_cal": "ReembSemDestino",
+                        "banco": r_item["banco"],
+                        "is_reembolso": True
+                    })
+                else:
+                    # Saída destinada (Cartão / Cheque Especial) -> linha vermelha
+                    eventos_por_data.setdefault(dt_r, []).append({
+                        "descricao": f"🎯 Destino: {r_item['motivo']}",
+                        "valor": r_item["valor"],
+                        "tipo": "Saída",
+                        "papel_cal": "SaidaComprometida",
+                        "banco": r_item["banco"],
+                        "is_reembolso": True
+                    })
 
     # Constrói as semanas de 04/MM até 03/MM+1
     start_grid = dt_full_ini - timedelta(days=dt_full_ini.weekday())
@@ -1500,6 +1533,7 @@ if st.session_state.bloco_ativo == "previstos":
                     if (tem_in_livre or tem_reemb_amarelo) and tem_out_comp:
                         classes.append("has-ambos")
                     elif tem_out_comp:
+                        # Se entrou reembolso e já saiu 100% destinado (ex: dia 18), marca o card em vermelho!
                         classes.append("has-saida")
                     elif tem_reemb_amarelo and not tem_in_livre:
                         classes.append("has-reemb-livre")
@@ -1533,9 +1567,9 @@ if st.session_state.bloco_ativo == "previstos":
     st.markdown(f"""
     <div style="display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 12px 0; font-size: 0.64rem;">
         <span style="color: #eab308;">💰 16/{st.session_state.cal_mes:02d} e {dt_salario_03.strftime('%d/%m')} (Salários)</span>
-        <span style="color: #4ade80;">🟢 Entrada Livre</span>
+        <span style="color: #4ade80;">🟢 Entrada</span>
         <span style="color: #fbbf24;">🟡 Reembolso s/ Destinação</span>
-        <span style="color: #f87171;">🔴 Conta / Reembolso Destinado</span>
+        <span style="color: #f87171;">🔴 Saída / Já Destinado</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2047,15 +2081,258 @@ elif st.session_state.bloco_ativo == "advisor":
     st.markdown('<div class="panel-box">', unsafe_allow_html=True)
     c_tit, c_fech = st.columns([5, 1])
     with c_tit:
-        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">🧠 Advisor • Estratégia & Alocação Inteligente</span>', unsafe_allow_html=True)
+        st.markdown('<span style="font-weight: 800; color: #38bdf8; font-size: 0.92rem;">🧠 Advisor • Diagnóstico Completo & Plano de Virada</span>', unsafe_allow_html=True)
     with c_fech:
         if st.button("✕", key="fechar_adv"):
             st.session_state.bloco_ativo = None
             st.rerun()
-    
+
     diagnosticos = []
 
-    # --- 1. ANÁLISE DE REEMBOLSOS FUTUROS DESTINADOS À CONTA CORRENTE ---
+    # --- DADOS CONSOLIDADOS DO CICLO ATUAL (04/MM a 03/MM+1) ---
+    dt_adv_ini, dt_adv_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
+    meses_pt_adv = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    nome_mes_adv = meses_pt_adv[st.session_state.cal_mes - 1]
+
+    entradas_fixas_ou_prev = 0.0
+    saidas_fixas_ou_prev = 0.0
+    saidas_por_categoria = {}
+
+    if not df_prev.empty:
+        for _, r_p in df_prev.iterrows():
+            try:
+                d_p = datetime.strptime(r_p["data_prevista"], "%Y-%m-%d").date()
+                if dt_adv_ini <= d_p <= dt_adv_fim:
+                    v_p = float(r_p["valor"])
+                    if r_p["tipo"] == "Entrada":
+                        entradas_fixas_ou_prev += v_p
+                    else:
+                        saidas_fixas_ou_prev += v_p
+                        cat_p = str(r_p.get("categoria", "Outros"))
+                        saidas_por_categoria[cat_p] = saidas_por_categoria.get(cat_p, 0.0) + v_p
+            except:
+                pass
+
+    # Reembolsos previstos no ciclo
+    reemb_livre_adv = 0.0
+    reemb_dest_adv = 0.0
+    if not df_reemb_itens.empty:
+        for _, r_ri in df_reemb_itens.iterrows():
+            try:
+                d_r = datetime.strptime(r_ri["data"], "%Y-%m-%d").date()
+                if dt_adv_ini <= d_r <= dt_adv_fim:
+                    if r_ri["acao"] == "Creditar em Conta Corrente":
+                        reemb_livre_adv += float(r_ri["valor"])
+                    else:
+                        reemb_dest_adv += float(r_ri["valor"])
+            except:
+                pass
+
+    # Análise detalhada das compras parceladas
+    total_parcelas_mes = df_parc["valor_parcela"].sum() if not df_parc.empty else 0.0
+    total_divida_parcelas = sum(max(0, int(r["total_parcelas"]) - int(r["parcela_atual"])) * float(r["valor_parcela"]) for _, r in df_parc.iterrows()) if not df_parc.empty else 0.0
+
+    # --- 1. PROJEÇÃO MÊS A MÊS (6 MESES) PARA DESCOBRIR QUANDO COMEÇA A SOBRAR MAIS DINHEIRO ---
+    # Calcula renda recorrente mensal base (salários/rendas fixas ou entradas do ciclo atual) e gastos recorrentes base
+    renda_mensal_base = entradas_fixas_ou_prev
+    if renda_mensal_base == 0 and not df_prev.empty:
+        # Fallback: média das entradas cadastradas por mês
+        renda_mensal_base = df_prev[df_prev["tipo"] == "Entrada"]["valor"].sum() / max(1, len(df_prev[df_prev["tipo"] == "Entrada"]["data_prevista"].str[:7].unique()))
+
+    # Gastos fixos/recorrentes mensais (excluindo faturas variáveis se já estiverem nas parcelas, mas considerando contas fixas)
+    gastos_mensais_base = saidas_fixas_ou_prev
+
+    projecoes_6m = []
+    mes_virada_nome = None
+    ganho_mensal_virada = 0.0
+
+    for offset_m in range(0, 6):
+        dt_ref_m = date(st.session_state.cal_ano, st.session_state.cal_mes, 1) + relativedelta(months=offset_m)
+        m_idx = dt_ref_m.month
+        y_val = dt_ref_m.year
+        label_m = f"{meses_pt_adv[m_idx - 1][:3]}/{str(y_val)[2:]}"
+
+        # Parcelas ainda ativas nesse mês futuro (parcela_atual + offset_m <= total_parcelas)
+        parc_ativas_m = 0.0
+        parc_quitadas_ate_aqui = 0.0
+        if not df_parc.empty:
+            for _, rp in df_parc.iterrows():
+                p_at = int(rp["parcela_atual"])
+                p_tot = int(rp["total_parcelas"])
+                v_p = float(rp["valor_parcela"])
+                if (p_at + offset_m) <= p_tot:
+                    parc_ativas_m += v_p
+                else:
+                    parc_quitadas_ate_aqui += v_p
+
+        # Entradas e saídas previstas especificamente naquele ciclo futuro (se o usuário já repetiu meses)
+        dt_c_i, dt_c_f, _ = get_intervalo_ciclo(y_val, m_idx, "Ciclo Completo (04 a 03)")
+        ent_m = 0.0
+        sai_m = 0.0
+        if not df_prev.empty:
+            for _, r_pr in df_prev.iterrows():
+                try:
+                    dp_obj = datetime.strptime(r_pr["data_prevista"], "%Y-%m-%d").date()
+                    if dt_c_i <= dp_obj <= dt_c_f:
+                        if r_pr["tipo"] == "Entrada":
+                            ent_m += float(r_pr["valor"])
+                        else:
+                            sai_m += float(r_pr["valor"])
+                except:
+                    pass
+
+        if ent_m == 0.0:
+            ent_m = renda_mensal_base
+        if sai_m == 0.0:
+            sai_m = gastos_mensais_base
+
+        # Se o usuário não lançou a fatura/parcelas dentro das saídas previstas daquele mês, adiciona a diferença das parcelas
+        # Para evitar dupla contagem no mês 0, comparamos a redução de parcelas em relação ao mês atual
+        alivio_parcelas = max(0.0, total_parcelas_mes - parc_ativas_m)
+        sobra_estimada_m = (ent_m - sai_m) + alivio_parcelas + (reemb_livre_adv if offset_m == 0 else 0.0)
+
+        projecoes_6m.append({
+            "mes": label_m,
+            "parcelas": parc_ativas_m,
+            "alivio": alivio_parcelas,
+            "sobra": sobra_estimada_m
+        })
+
+        if offset_m > 0 and mes_virada_nome is None and alivio_parcelas >= 100.0 and sobra_estimada_m > 0:
+            mes_virada_nome = f"{meses_pt_adv[m_idx - 1]}/{y_val}"
+            ganho_mensal_virada = alivio_parcelas
+
+    # Se não houve alívio >= 100 por parcelas, identifica o primeiro mês com sobra positiva relevante
+    if mes_virada_nome is None:
+        for idx_p, item_p in enumerate(projecoes_6m):
+            if idx_p > 0 and item_p["sobra"] > projecoes_6m[0]["sobra"] + 50.0:
+                dt_v = date(st.session_state.cal_ano, st.session_state.cal_mes, 1) + relativedelta(months=idx_p)
+                mes_virada_nome = f"{meses_pt_adv[dt_v.month - 1]}/{dt_v.year}"
+                ganho_mensal_virada = item_p["sobra"] - projecoes_6m[0]["sobra"]
+                break
+
+    # Card Destaque: Previsão de Quando Vai Começar a Sobrar Mais Dinheiro
+    sobra_atual_ciclo = projecoes_6m[0]["sobra"] if projecoes_6m else 0.0
+    if mes_virada_nome:
+        resumo_virada_html = (
+            f"Hoje sua sobra líquida projetada em <strong>{nome_mes_adv}</strong> é de "
+            f"<strong style='color: {'#4ade80' if sobra_atual_ciclo >= 0 else '#f87171'};'>R$ {sobra_atual_ciclo:,.2f}</strong>. "
+            f"Com o encerramento natural das suas parcelas atuais, o <strong>ponto de virada será em {mes_virada_nome}</strong>, "
+            f"quando você passará a ter <strong style='color: #4ade80;'>+ R$ {ganho_mensal_virada:,.2f}/mês</strong> extras livres no orçamento!"
+        )
+    elif total_parcelas_mes > 0:
+        # Calcula o mês exato em que a primeira parcela termina
+        menor_restante = min(max(1, int(r["total_parcelas"]) - int(r["parcela_atual"]) + 1) for _, r in df_parc.iterrows())
+        dt_fim_prim = date(st.session_state.cal_ano, st.session_state.cal_mes, 1) + relativedelta(months=menor_restante)
+        mes_fim_str = f"{meses_pt_adv[dt_fim_prim.month - 1]}/{dt_fim_prim.year}"
+        resumo_virada_html = (
+            f"Hoje você compromete <strong>R$ {total_parcelas_mes:,.2f}/mês</strong> com compras parceladas (saldo devedor total de R$ {total_divida_parcelas:,.2f}). "
+            f"Se não fizer novas parcelas, seu orçamento começa a aliviar a partir de <strong>{mes_fim_str}</strong>."
+        )
+    else:
+        resumo_virada_html = (
+            f"Sua sobra líquida projetada em <strong>{nome_mes_adv}</strong> é de "
+            f"<strong style='color: {'#4ade80' if sobra_atual_ciclo >= 0 else '#f87171'};'>R$ {sobra_atual_ciclo:,.2f}</strong>. "
+            f"Como você não tem parcelas longas pesando nos próximos meses, cortar os ralos abaixo aumenta sua sobra imediatamente já no próximo ciclo."
+        )
+
+    # Mini tabela visual de 6 meses dentro do Advisor
+    cols_6m_html = ""
+    for p6 in projecoes_6m:
+        c_s = "#4ade80" if p6["sobra"] >= 0 else "#f87171"
+        cols_6m_html += f"""
+        <div style="background: #111a28; border: 1px solid #1e2d44; border-radius: 8px; padding: 6px 4px; text-align: center;">
+            <div style="font-size: 0.60rem; color: #94a3b8; font-weight: 700;">{p6['mes']}</div>
+            <div style="font-family: 'JetBrains Mono'; font-size: 0.68rem; font-weight: 800; color: {c_s}; margin-top: 2px;">
+                {'+' if p6['sobra'] >= 0 else ''}{p6['sobra']:,.0f}
+            </div>
+            <div style="font-size: 0.52rem; color: #64748b; margin-top: 1px;">Parc: {p6['parcelas']:,.0f}</div>
+        </div>
+        """
+
+    st.markdown(f"""
+    <div style="background: linear-gradient(145deg, #132136 0%, #0d1624 100%); border: 1px solid #2b456b; border-radius: 14px; padding: 12px; margin: 8px 0 12px 0;">
+        <div style="font-size: 0.74rem; font-weight: 800; color: #38bdf8; text-transform: uppercase;">📈 Projeção de Virada (Próximos 6 Meses)</div>
+        <div style="font-size: 0.72rem; color: #e2e8f0; margin-top: 5px; line-height: 1.45;">{resumo_virada_html}</div>
+        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 10px;">
+            {cols_6m_html}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- 2. ONDE VOCÊ ESTÁ PERDENDO DINHEIRO (RALOS FINANCEIROS DETECTADOS) ---
+    ralos = []
+    if total_cheque > 0:
+        juros_est_mes = total_cheque * 0.08  # ~8% ao mês média cheque especial
+        ralos.append(
+            f"<strong>1. Juros de Cheque Especial (R$ {total_cheque:,.2f} em uso):</strong> Você está perdendo cerca de "
+            f"<strong style='color:#f87171;'>R$ {juros_est_mes:,.2f}/mês</strong> só em juros rotativos. Zerar isso é a prioridade #1."
+        )
+
+    if renda_mensal_base > 0 and total_parcelas_mes > 0:
+        pct_parc_renda = (total_parcelas_mes / renda_mensal_base) * 100
+        if pct_parc_renda >= 25.0:
+            ralos.append(
+                f"<strong>2. Bola de Neve no Cartão ({pct_parc_renda:.0f}% da renda):</strong> Suas parcelas somam "
+                f"<strong>R$ {total_parcelas_mes:,.2f}/mês</strong> (totalizando R$ {total_divida_parcelas:,.2f} a pagar). "
+                f"Evite qualquer compra parcelada nova pelos próximos 60 dias para destravar seu fluxo."
+            )
+
+    # Verifica gastos no extrato por categoria (ex: Lazer, Alimentação, Transporte)
+    if not df_tx.empty:
+        tx_saidas = df_tx[df_tx["tipo"] == "Saída"].copy()
+        if not tx_saidas.empty:
+            gastos_cat = tx_saidas.groupby("categoria")["valor"].sum().sort_values(ascending=False)
+            top_cat = gastos_cat.index[0]
+            top_cat_val = float(gastos_cat.iloc[0])
+            if top_cat_val > 150.0:
+                ralos.append(
+                    f"<strong>3. Maior Vazamento no Extrato ({top_cat}):</strong> Você já acumulou "
+                    f"<strong>R$ {top_cat_val:,.2f}</strong> lançados em <em>{top_cat}</em>. "
+                    f"Reduzir 20% dessa categoria economiza <strong>R$ {top_cat_val * 0.20:,.2f}</strong> direto no seu bolso."
+                )
+
+    # Verifica dinheiro parado em conta sem rendimento ou fatura alta
+    if total_faturas > total_saldos and total_faturas > 0:
+        gap_fat = total_faturas - total_saldos
+        ralos.append(
+            f"<strong>4. Descasamento de Caixa (Faturas vs. Saldo):</strong> Suas faturas atuais (R$ {total_faturas:,.2f}) "
+            f"superam seu saldo real em conta (R$ {total_saldos:,.2f}) em <strong>R$ {gap_fat:,.2f}</strong>. "
+            f"Isso obriga você a depender integralmente do próximo salário para cobrir gastos já feitos."
+        )
+
+    if not ralos:
+        ralos.append("Nenhum vazamento grave de juros ou excesso de parcelas detectado hoje. Mantenha o controle rígido dos gastos variáveis para acelerar sua reserva.")
+
+    diagnosticos.append({
+        "titulo": "🔍 Onde Você Está Perdendo Dinheiro & Como Ajustar:",
+        "tipo": "danger" if (total_cheque > 0 or total_faturas > total_saldos) else "warning",
+        "desc": "<br>• ".join([""] + ralos)[5:]
+    })
+
+    # --- 3. CAMINHO PRÁTICO PARA SOBRAR DINHEIRO (PLANO DE AÇÃO EM 3 PASSOS) ---
+    passo1 = (
+        f"<strong>Passo 1 (Estancar Juros):</strong> Use os reembolsos de KM e entradas dos dias 03/16 para manter o Cheque Especial em <strong>R$ 0,00</strong>."
+        if total_cheque > 0 else
+        "<strong>Passo 1 (Proteção):</strong> Mantenha o Cheque Especial zerado e concentre combustível/pedágio apenas no cartão com maior prazo."
+    )
+    passo2 = (
+        f"<strong>Passo 2 (Trava de Parcelas):</strong> Congele novos parcelamentos até liquidar as parcelas atuais (R$ {total_parcelas_mes:,.2f}/mês)."
+        if total_parcelas_mes > 0 else
+        "<strong>Passo 2 (Compra à Vista):</strong> Continue sem parcelas pesadas e priorize pagamentos no Pix com desconto."
+    )
+    meta_reserva = max(100.0, round(renda_mensal_base * 0.10, 2)) if renda_mensal_base > 0 else 200.0
+    passo3 = (
+        f"<strong>Passo 3 (Pague-se Primeiro):</strong> Assim que cair o salário do dia 03 ou 16, separe imediatamente "
+        f"<strong>R$ {meta_reserva:,.2f} (10% da renda)</strong> em uma conta separada (Nubank/Mercado Pago) antes de pagar contas variáveis."
+    )
+    diagnosticos.append({
+        "titulo": "🧭 Caminho para Ajustar Sua Vida Financeira:",
+        "tipo": "success",
+        "desc": f"{passo1}<br>{passo2}<br>{passo3}"
+    })
+
+    # --- 4. ANÁLISE DE REEMBOLSOS FUTUROS DESTINADOS À CONTA CORRENTE ---
     reemb_fut_cc = pd.DataFrame()
     if not df_reemb_itens.empty:
         reemb_fut_cc = df_reemb_itens[
@@ -2066,15 +2343,9 @@ elif st.session_state.bloco_ativo == "advisor":
     if not reemb_fut_cc.empty:
         total_reemb_cc = reemb_fut_cc["valor"].sum()
         bancos_dest_cc = ", ".join(reemb_fut_cc["banco"].unique())
-        
-        # Analisa qual a melhor destinação real para esse dinheiro futuro
         contas_com_cheque = df_bancos[df_bancos["cheque_especial_usado"] > 0].sort_values(by="cheque_especial_usado", ascending=False)
         cartoes_ativos = df_bancos[df_bancos["tem_cartao"] == 1].copy()
         if not cartoes_ativos.empty:
-            cartoes_ativos["lim_real"] = cartoes_ativos.apply(
-                lambda r: r["limite_liberado"] if r["limite_liberado"] > 0 else max(0.0, r["limite_cartao"] - r["fatura_atual"]),
-                axis=1
-            )
             cartoes_ativos["uso_pct"] = cartoes_ativos.apply(
                 lambda r: (r["fatura_atual"] / r["limite_cartao"] * 100) if r["limite_cartao"] > 0 else 0.0,
                 axis=1
@@ -2086,13 +2357,13 @@ elif st.session_state.bloco_ativo == "advisor":
             sobra_apos_cheque = max(0.0, total_reemb_cc - val_abater)
             msg_acao_reemb = (
                 f"Você agendou <strong>R$ {total_reemb_cc:,.2f}</strong> de reembolso futuro para cair em Conta Corrente ({bancos_dest_cc}). "
-                f"<strong>Recomendação do Advisor:</strong> Assim que esse valor entrar, transfira imediatamente <strong>R$ {val_abater:,.2f}</strong> "
-                f"para cobrir o Cheque Especial do <strong>{pior_cheque['banco']}</strong> (que está em R$ {pior_cheque['cheque_especial_usado']:,.2f} e cobra juros diários)."
+                f"<strong>Recomendação:</strong> Assim que cair, transfira <strong>R$ {val_abater:,.2f}</strong> para cobrir o Cheque Especial do "
+                f"<strong>{pior_cheque['banco']}</strong> (R$ {pior_cheque['cheque_especial_usado']:,.2f})."
             )
             if sobra_apos_cheque > 0:
-                msg_acao_reemb += f" Os <strong>R$ {sobra_apos_cheque:,.2f}</strong> restantes você pode deixar rendendo em conta como capital de giro para combustível."
+                msg_acao_reemb += f" Os <strong>R$ {sobra_apos_cheque:,.2f}</strong> restantes deixe rendendo em conta para gasolina."
             diagnosticos.append({
-                "titulo": "💡 O que fazer com o Reembolso Futuro em Conta:",
+                "titulo": "💡 Destino Ideal para o Reembolso Futuro em Conta:",
                 "tipo": "warning",
                 "desc": msg_acao_reemb
             })
@@ -2100,42 +2371,37 @@ elif st.session_state.bloco_ativo == "advisor":
             cartao_apertado = cartoes_ativos.sort_values(by="uso_pct", ascending=False).iloc[0]
             val_adiantar = min(total_reemb_cc, float(cartao_apertado["fatura_atual"]))
             diagnosticos.append({
-                "titulo": "💡 O que fazer com o Reembolso Futuro em Conta:",
+                "titulo": "💡 Destino Ideal para o Reembolso Futuro em Conta:",
                 "tipo": "info",
                 "desc": (
-                    f"Você tem <strong>R$ {total_reemb_cc:,.2f}</strong> de reembolso previsto para Conta Corrente ({bancos_dest_cc}). "
-                    f"Como seu Cheque Especial está zerado, mas o cartão <strong>{cartao_apertado['banco']}</strong> está com "
-                    f"<strong>{cartao_apertado['uso_pct']:.0f}% do limite comprometido</strong> (Fatura: R$ {cartao_apertado['fatura_atual']:,.2f}), "
-                    f"vale a pena adiantar <strong>R$ {val_adiantar:,.2f}</strong> nessa fatura para liberar limite para os próximos pedágios."
+                    f"Você tem <strong>R$ {total_reemb_cc:,.2f}</strong> previstos para Conta Corrente ({bancos_dest_cc}). "
+                    f"Como o cartão <strong>{cartao_apertado['banco']}</strong> está com <strong>{cartao_apertado['uso_pct']:.0f}% do limite comprometido</strong>, "
+                    f"vale adiantar <strong>R$ {val_adiantar:,.2f}</strong> nessa fatura para liberar limite para os próximos pedágios."
                 )
             })
         else:
             diagnosticos.append({
-                "titulo": "💡 O que fazer com o Reembolso Futuro em Conta:",
+                "titulo": "💡 Destino Ideal para o Reembolso Futuro em Conta:",
                 "tipo": "success",
                 "desc": (
                     f"Você tem <strong>R$ {total_reemb_cc:,.2f}</strong> previstos para cair em Conta Corrente ({bancos_dest_cc}). "
-                    f"Como seu Cheque Especial está zerado e suas faturas estão sob controle, <strong>mantenha esse valor na conta</strong> "
-                    f"(preferencialmente em conta remunerada 100% CDI como Nubank/Mercado Pago) para pagar a gasolina das próximas viagens à vista no Pix/Débito sem depender de crédito!"
+                    f"Com Cheque Especial zerado e faturas controladas, <strong>mantenha esse valor rendendo em conta</strong> para pagar a gasolina das próximas alocações à vista!"
                 )
             })
 
-    # --- 2. ESTRATÉGIA PARA PAGAR GASOLINA E PEDÁGIO DAS PRÓXIMAS ALOCAÇÕES ---
+    # --- 5. ESTRATÉGIA PARA PAGAR GASOLINA E PEDÁGIO DAS PRÓXIMAS ALOCAÇÕES ---
     dia_hoje = date.today().day
     cartoes_disp = df_bancos[df_bancos["tem_cartao"] == 1].copy()
     melhor_cartao_msg = ""
 
     if not cartoes_disp.empty:
-        # Calcula limite real livre e distância até o melhor dia de compra (fechamento)
         def score_cartao(row):
             lim_t = float(row["limite_cartao"])
             fat = float(row["fatura_atual"])
             lim_lib = float(row["limite_liberado"]) if float(row["limite_liberado"]) > 0 else max(0.0, lim_t - fat)
             dia_f = int(row.get("dia_fechamento", 3))
             dia_v = int(row.get("dia_vencimento", 10))
-            # Dias até o próximo fechamento
             if dia_hoje >= dia_f:
-                # Acabou de fechar: melhor momento! Fatura só vence no mês seguinte
                 dias_prazo = (30 - dia_hoje) + dia_v
                 status_ciclo = "Fatura recém-fechada (máximo prazo)"
             else:
@@ -2151,8 +2417,7 @@ elif st.session_state.bloco_ativo == "advisor":
             melhor_cartao_msg = (
                 f"<strong>Use o Cartão {top_c['banco']}</strong> para Pedágio e Gasolina: ele tem "
                 f"<strong>R$ {top_c['lim_real']:,.2f}</strong> de limite liberado real, {top_c['status_ciclo']} "
-                f"e vence dia {int(top_c['dia_vencimento'])} (~{int(top_c['dias_prazo'])} dias de prazo). "
-                f"Isso dá tempo de sobra para o reembolso da empresa cair antes da fatura vencer!"
+                f"e vence dia {int(top_c['dia_vencimento'])} (~{int(top_c['dias_prazo'])} dias de prazo)."
             )
 
     if total_saldos >= 200.0 and melhor_cartao_msg:
@@ -2171,7 +2436,7 @@ elif st.session_state.bloco_ativo == "advisor":
     else:
         desc_estrategia = (
             f"<strong>Atenção:</strong> Seus cartões estão sem limite livre suficiente (ou desativados) e seu saldo atual é R$ {total_saldos:,.2f}. "
-            f"Nesse cenário específico, utilize o <strong>Cheque Especial de menor taxa</strong> apenas pelo valor exato da gasolina/pedágio da viagem e "
+            f"Utilize o <strong>Cheque Especial de menor taxa</strong> apenas pelo valor exato da gasolina/pedágio da viagem e "
             f"registre imediatamente na aba <strong>⛽ Destinar Reembolso</strong> para cobrir assim que a empresa pagar."
         )
         tipo_est = "warning"
@@ -2182,29 +2447,6 @@ elif st.session_state.bloco_ativo == "advisor":
         "desc": desc_estrategia
     })
 
-    # --- 3. SAÚDE GERAL DE CHEQUE ESPECIAL E FATURAS ---
-    if total_cheque > 0:
-        diagnosticos.append({
-            "titulo": "⚠️ Alerta Crítico: Cheque Especial Ativo",
-            "tipo": "danger",
-            "desc": f"Você está utilizando R$ {total_cheque:,.2f} do limite emergencial. Priorize abater esse valor antes de qualquer gasto extra."
-        })
-        
-    if total_saldos < total_faturas:
-        deficit = total_faturas - total_saldos
-        diagnosticos.append({
-            "titulo": "🚨 Faturas Maiores que o Saldo Atual em Conta",
-            "tipo": "danger",
-            "desc": f"Suas faturas somam R$ {total_faturas:,.2f}, enquanto seu saldo real é R$ {total_saldos:,.2f} (diferença de R$ {deficit:,.2f}). Use seus recebimentos dos dias 03/16 e reembolsos previstos para cobrir."
-        })
-    else:
-        folga = total_saldos - total_faturas
-        diagnosticos.append({
-            "titulo": "🛡️ Faturas Cobertas pelo Saldo Real",
-            "tipo": "success",
-            "desc": f"Seu saldo atual em conta quita 100% das suas faturas abertas e ainda sobram R$ {folga:,.2f} livres."
-        })
-        
     for diag in diagnosticos:
         cor_borda = "#38bdf8"
         if diag["tipo"] == "danger": cor_borda = "#f87171"
