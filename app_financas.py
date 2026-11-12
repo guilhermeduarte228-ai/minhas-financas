@@ -560,6 +560,7 @@ def adicionar_previsto(data_str, desc, valor, cat, tipo, banco, meses_repetir=1,
     conn.close()
 
 def atualizar_previsto(id_prev, data_str, desc, valor, cat, tipo, banco, fixo):
+    id_prev = int(id_prev)
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("""
@@ -571,6 +572,7 @@ def atualizar_previsto(id_prev, data_str, desc, valor, cat, tipo, banco, fixo):
     conn.close()
 
 def efetivar_previsto(id_prev):
+    id_prev = int(id_prev)
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("SELECT data_prevista, descricao, valor, categoria, tipo, banco FROM lancamentos_previstos WHERE id = ?", (id_prev,))
@@ -604,6 +606,7 @@ def get_intervalo_ciclo(ano, mes, modo="Ciclo Completo (03 a 03)"):
         return dt_03, dt_fim_ciclo, dt_prox_03
 
 def remover_previsto(id_prev):
+    id_prev = int(id_prev)
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("DELETE FROM lancamentos_previstos WHERE id = ?", (id_prev,))
@@ -626,6 +629,7 @@ def adicionar_parcela(banco, desc, valor_parcela, parcela_atual, total_parcelas,
     conn.close()
 
 def avancar_parcela(id_parc):
+    id_parc = int(id_parc)
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("SELECT parcela_atual, total_parcelas FROM compras_parceladas WHERE id = ?", (id_parc,))
@@ -643,6 +647,7 @@ def avancar_parcela(id_parc):
     conn.close()
 
 def remover_parcela(id_parc):
+    id_parc = int(id_parc)
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("DELETE FROM compras_parceladas WHERE id = ?", (id_parc,))
@@ -689,6 +694,60 @@ def atualizar_vencimentos(banco, dia_venc, dia_fech):
         SET dia_vencimento = ?, dia_fechamento = ?
         WHERE banco = ?
     """, (dia_venc, dia_fech, banco))
+    conn.commit()
+    conn.close()
+
+def atualizar_transacao_extrato(id_tx, nova_data, nova_desc, novo_valor, nova_cat, novo_banco, novo_meio, novo_tipo):
+    id_tx = int(id_tx)
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("SELECT valor, tipo, banco, meio FROM transacoes WHERE id = ?", (id_tx,))
+    old = c.fetchone()
+    if old:
+        old_val, old_tipo, old_banco, old_meio = old
+        # Reverte efeito antigo
+        if old_tipo == "Saída":
+            if old_meio == "Cartão de Crédito":
+                c.execute("UPDATE contas_bancarias SET fatura_atual = MAX(0.0, fatura_atual - ?) WHERE banco = ?", (old_val, old_banco))
+            else:
+                c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta + ? WHERE banco = ?", (old_val, old_banco))
+        elif old_tipo == "Entrada":
+            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (old_val, old_banco))
+
+        # Atualiza registro
+        c.execute("""
+            UPDATE transacoes
+            SET data = ?, descricao = ?, valor = ?, categoria = ?, banco = ?, meio = ?, tipo = ?
+            WHERE id = ?
+        """, (nova_data, nova_desc, novo_valor, nova_cat, novo_banco, novo_meio, novo_tipo, id_tx))
+
+        # Aplica novo efeito
+        if novo_tipo == "Saída":
+            if novo_meio == "Cartão de Crédito":
+                c.execute("UPDATE contas_bancarias SET fatura_atual = fatura_atual + ? WHERE banco = ?", (novo_valor, novo_banco))
+            else:
+                c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (novo_valor, novo_banco))
+        elif novo_tipo == "Entrada":
+            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta + ? WHERE banco = ?", (novo_valor, novo_banco))
+    conn.commit()
+    conn.close()
+
+def remover_transacao_extrato(id_tx):
+    id_tx = int(id_tx)
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("SELECT valor, tipo, banco, meio FROM transacoes WHERE id = ?", (id_tx,))
+    old = c.fetchone()
+    if old:
+        old_val, old_tipo, old_banco, old_meio = old
+        if old_tipo == "Saída":
+            if old_meio == "Cartão de Crédito":
+                c.execute("UPDATE contas_bancarias SET fatura_atual = MAX(0.0, fatura_atual - ?) WHERE banco = ?", (old_val, old_banco))
+            else:
+                c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta + ? WHERE banco = ?", (old_val, old_banco))
+        elif old_tipo == "Entrada":
+            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (old_val, old_banco))
+        c.execute("DELETE FROM transacoes WHERE id = ?", (id_tx,))
     conn.commit()
     conn.close()
 
@@ -758,6 +817,7 @@ def aplicar_destinacao_reembolso(data_str, valor_total, lista_destinos):
     conn.close()
 
 def estornar_item_destino(id_item):
+    id_item = int(id_item)
     conn = sqlite3.connect("financas.db")
     c = conn.cursor()
     c.execute("SELECT banco, acao, valor, motivo, estornado, reembolso_id FROM reembolsos_destinados_itens WHERE id = ?", (id_item,))
@@ -979,6 +1039,8 @@ if "mostrar_calc_km" not in st.session_state:
 
 if "editando_id" not in st.session_state:
     st.session_state.editando_id = None
+if "editando_tx_id" not in st.session_state:
+    st.session_state.editando_tx_id = None
 
 if "copiando_prev" not in st.session_state:
     st.session_state.copiando_prev = None
@@ -1404,7 +1466,7 @@ if st.session_state.bloco_ativo == "previstos":
             with c_ed:
                 st.markdown('<div class="btn-action-icon" style="margin-bottom: 8px;">', unsafe_allow_html=True)
                 if st.button("✏️", key=f"btn_edit_{row_p['id']}", help="Editar"):
-                    st.session_state.editando_id = row_p["id"]
+                    st.session_state.editando_id = int(row_p["id"])
                     st.session_state.copiando_prev = None
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -1412,7 +1474,7 @@ if st.session_state.bloco_ativo == "previstos":
                 st.markdown('<div class="btn-clear" style="margin-bottom: 8px;">', unsafe_allow_html=True)
                 if st.button("🗑️", key=f"del_p_{row_p['id']}", help="Excluir"):
                     remover_previsto(row_p["id"])
-                    if st.session_state.editando_id == row_p["id"]:
+                    if st.session_state.editando_id == int(row_p["id"]):
                         st.session_state.editando_id = None
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
@@ -2066,8 +2128,50 @@ with tab_extrato:
         st.markdown('<div class="btn-clear" style="margin-top: 0.3rem;">', unsafe_allow_html=True)
         if st.button("🗑️ Limpar Extrato", key="btn_limpar_extrato_aba"):
             limpar_extrato_completo()
+            st.session_state.editando_tx_id = None
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
+
+    # Formulário de Edição de Transação do Extrato
+    if st.session_state.editando_tx_id is not None:
+        tx_edit_df = df_tx[df_tx["id"] == st.session_state.editando_tx_id]
+        if not tx_edit_df.empty:
+            r_tx = tx_edit_df.iloc[0]
+            st.markdown("""
+            <div style="background: #101c2e; border: 1px solid #38bdf8; border-radius: 14px; padding: 12px; margin-bottom: 14px;">
+                <span style="font-size: 0.82rem; font-weight: 800; color: #38bdf8;">✏️ Editando Transação do Extrato</span>
+            """, unsafe_allow_html=True)
+            with st.form("form_editar_tx_extrato"):
+                c_tx1, c_tx2 = st.columns(2)
+                with c_tx1:
+                    tx_desc = st.text_input("Descrição", value=str(r_tx["descricao"]))
+                    tx_val = st.number_input("Valor (R$)", min_value=0.01, value=float(r_tx["valor"]), step=5.0)
+                    tx_tipo = st.selectbox("Tipo", ["Saída", "Entrada"], index=0 if r_tx["tipo"] == "Saída" else 1)
+                with c_tx2:
+                    tx_data = st.text_input("Data", value=str(r_tx["data"]))
+                    b_list = df_bancos["banco"].tolist()
+                    idx_b_tx = b_list.index(r_tx["banco"]) if r_tx["banco"] in b_list else 0
+                    tx_banco = st.selectbox("Banco", b_list, index=idx_b_tx)
+                    meios_list = ["Cartão de Crédito", "Conta Corrente / Pix"]
+                    idx_m_tx = meios_list.index(r_tx["meio"]) if r_tx["meio"] in meios_list else 1
+                    tx_meio = st.selectbox("Método", meios_list, index=idx_m_tx)
+                
+                cats_tx = ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Saúde", "Salário", "Reembolso KM", "OFX / Cartão", "OFX / Conta", "Outros"]
+                idx_c_tx = cats_tx.index(r_tx["categoria"]) if r_tx["categoria"] in cats_tx else len(cats_tx) - 1
+                tx_cat = st.selectbox("Categoria", cats_tx, index=idx_c_tx)
+
+                c_tx_b1, c_tx_b2 = st.columns(2)
+                with c_tx_b1:
+                    if st.form_submit_button("💾 Salvar Alteração"):
+                        atualizar_transacao_extrato(int(r_tx["id"]), tx_data, tx_desc, tx_val, tx_cat, tx_banco, tx_meio, tx_tipo)
+                        st.session_state.editando_tx_id = None
+                        st.success("Transação atualizada e saldo recalculado!")
+                        st.rerun()
+                with c_tx_b2:
+                    if st.form_submit_button("✕ Cancelar"):
+                        st.session_state.editando_tx_id = None
+                        st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
     if df_tx.empty:
         st.info("Nenhuma transação registrada no extrato.")
@@ -2076,18 +2180,36 @@ with tab_extrato:
             is_saida = row["tipo"] == "Saída"
             sinal = "-" if is_saida else "+"
             cor = "#f87171" if is_saida else "#4ade80"
-            st.markdown(f"""
-            <div style="background: #121a28; border: 1px solid #1f2d42; border-radius: 14px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <div style="font-size: 0.85rem; font-weight: 700; color: #ffffff;">{row['descricao']}</div>
-                    <div style="font-size: 0.68rem; color: #64748b;">{row['data']} • {row['banco']} ({row['meio']})</div>
-                    <span style="font-size: 0.62rem; background: #1a2538; color: #38bdf8; padding: 2px 6px; border-radius: 4px;">{row['categoria']}</span>
+            c_tx_info, c_tx_acts = st.columns([4, 1.4])
+            with c_tx_info:
+                st.markdown(f"""
+                <div style="background: #121a28; border: 1px solid #1f2d42; border-radius: 14px; padding: 10px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-size: 0.82rem; font-weight: 700; color: #ffffff;">{row['descricao']}</div>
+                        <div style="font-size: 0.65rem; color: #64748b;">{row['data']} • {row['banco']} ({row['meio']})</div>
+                        <span style="font-size: 0.60rem; background: #1a2538; color: #38bdf8; padding: 2px 6px; border-radius: 4px;">{row['categoria']}</span>
+                    </div>
+                    <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.88rem; color: {cor};">
+                        {sinal} R$ {row['valor']:,.2f}
+                    </div>
                 </div>
-                <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.9rem; color: {cor};">
-                    {sinal} R$ {row['valor']:,.2f}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            with c_tx_acts:
+                c_ed_t, c_dl_t = st.columns(2)
+                with c_ed_t:
+                    st.markdown('<div class="btn-action-icon" style="margin-top: 6px;">', unsafe_allow_html=True)
+                    if st.button("✏️", key=f"ed_tx_{row['id']}", help="Editar lançamento"):
+                        st.session_state.editando_tx_id = int(row["id"])
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with c_dl_t:
+                    st.markdown('<div class="btn-clear" style="margin-top: 6px;">', unsafe_allow_html=True)
+                    if st.button("🗑️", key=f"dl_tx_{row['id']}", help="Excluir lançamento"):
+                        remover_transacao_extrato(int(row["id"]))
+                        if st.session_state.editando_tx_id == int(row["id"]):
+                            st.session_state.editando_tx_id = None
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
 
 with tab_novo:
     st.markdown('<div class="sec-header">Lançamentos & Importações</div>', unsafe_allow_html=True)
