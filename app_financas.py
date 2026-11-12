@@ -511,6 +511,44 @@ def init_db():
 
 init_db()
 
+def processar_reembolsos_na_data():
+    hoje_str = date.today().strftime("%Y-%m-%d")
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("""
+        SELECT id, banco, acao, valor, motivo, data
+        FROM reembolsos_destinados_itens
+        WHERE estornado = 0 AND status = 'Previsto' AND data <= ?
+    """, (hoje_str,))
+    vencidos = c.fetchall()
+    for row in vencidos:
+        id_item, banco, acao, val, motivo, dt_item = row
+        val = float(val)
+        dt_fmt = datetime.strptime(dt_item, "%Y-%m-%d").strftime("%d/%m/%Y") if len(dt_item) == 10 else dt_item
+        if acao == "Abater Cheque Especial":
+            c.execute("UPDATE contas_bancarias SET cheque_especial_usado = MAX(0.0, cheque_especial_usado - ?) WHERE banco = ?", (val, banco))
+            c.execute("""
+                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Abate Cheque Especial')
+            """, (dt_fmt, f"Reembolso: {motivo}", val, banco))
+        elif acao == "Pagar/Abater Fatura de Cartão":
+            c.execute("UPDATE contas_bancarias SET fatura_atual = MAX(0.0, fatura_atual - ?) WHERE banco = ?", (val, banco))
+            c.execute("""
+                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Pagamento de Fatura')
+            """, (dt_fmt, f"Reembolso: {motivo}", val, banco))
+        elif acao == "Creditar em Conta Corrente":
+            c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta + ? WHERE banco = ?", (val, banco))
+            c.execute("""
+                INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+                VALUES (?, ?, ?, 'Reembolso KM', 'Entrada', ?, 'Conta Corrente / Pix')
+            """, (dt_fmt, f"Reembolso: {motivo}", val, banco))
+        c.execute("UPDATE reembolsos_destinados_itens SET status = 'Efetivado' WHERE id = ?", (id_item,))
+    conn.commit()
+    conn.close()
+
+processar_reembolsos_na_data()
+
 def get_contas():
     conn = sqlite3.connect("financas.db")
     df = pd.read_sql_query("SELECT * FROM contas_bancarias", conn)
@@ -1104,29 +1142,51 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Calcula Renda Futura do Ciclo Ativo (04/MM a 03/MM+1)
+# Calcula Renda Futura LÍQUIDA/LIVRE do Ciclo Ativo (04/MM a 03/MM+1)
+# Desconta tudo o que já está comprometido (saídas previstas no ciclo + reembolsos futuros destinados a abater dívidas)
 dt_hero_ini, dt_hero_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
-renda_futura_prev = 0.0
+
+entradas_futuras_brutas = 0.0
+saidas_comprometidas_ciclo = 0.0
+
 if not df_prev.empty:
     for _, r_p in df_prev.iterrows():
-        if r_p["tipo"] == "Entrada":
-            try:
-                d_p = datetime.strptime(r_p["data_prevista"], "%Y-%m-%d").date()
-                if dt_hero_ini <= d_p <= dt_hero_fim:
-                    renda_futura_prev += float(r_p["valor"])
-            except:
-                pass
+        try:
+            d_p = datetime.strptime(r_p["data_prevista"], "%Y-%m-%d").date()
+            if dt_hero_ini <= d_p <= dt_hero_fim:
+                if r_p["tipo"] == "Entrada":
+                    entradas_futuras_brutas += float(r_p["valor"])
+                elif r_p["tipo"] == "Saída":
+                    saidas_comprometidas_ciclo += float(r_p["valor"])
+        except:
+            pass
 
-reembolsos_futuros_prev = 0.0
+reembolsos_livres_futuros = 0.0
+reembolsos_comprometidos_futuros = 0.0
 if not df_reemb_itens.empty:
     for _, r_ri in df_reemb_itens.iterrows():
         if r_ri.get("status", "Efetivado") == "Previsto":
-            reembolsos_futuros_prev += float(r_ri["valor"])
+            try:
+                d_r = datetime.strptime(r_ri["data"], "%Y-%m-%d").date()
+                in_window = (dt_hero_ini <= d_r <= dt_hero_fim)
+            except:
+                in_window = True
+            if in_window:
+                if r_ri["acao"] == "Creditar em Conta Corrente":
+                    reembolsos_livres_futuros += float(r_ri["valor"])
+                else:
+                    # Destinado a abater fatura de cartão ou cheque especial já comprometido
+                    reembolsos_comprometidos_futuros += float(r_ri["valor"])
 
-total_renda_futura = renda_futura_prev + reembolsos_futuros_prev
-projecao_com_futuro = total_saldos + total_renda_futura
+renda_futura_livre = (entradas_futuras_brutas - saidas_comprometidas_ciclo) + reembolsos_livres_futuros
+projecao_com_futuro = total_saldos + renda_futura_livre
 
-# Master Hero Card com Separação Clara: Patrimônio Real vs Renda Futura
+sinal_rf = "+" if renda_futura_livre >= 0 else "-"
+cor_rf = "#4ade80" if renda_futura_livre >= 0 else "#f87171"
+borda_rf = "rgba(56, 189, 248, 0.35)" if renda_futura_livre >= 0 else "rgba(248, 113, 113, 0.45)"
+bg_rf = "rgba(56, 189, 248, 0.08)" if renda_futura_livre >= 0 else "rgba(239, 68, 68, 0.10)"
+
+# Master Hero Card com Separação Clara: Patrimônio Real vs Renda Futura Livre (Descontado o Comprometido)
 st.markdown(f"""
 <div class="md-hero-card">
     <div style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 10px; align-items: start;">
@@ -1135,11 +1195,12 @@ st.markdown(f"""
             <div class="md-hero-val" style="font-size: 1.75rem; margin: 4px 0 8px 0;">R$ {total_saldos:,.2f}</div>
             <div class="md-msg-pill {classe_total}" style="margin-bottom: 0; font-size: 0.66rem;">{msg_total}</div>
         </div>
-        <div style="background: rgba(56, 189, 248, 0.08); border: 1px dashed rgba(56, 189, 248, 0.35); border-radius: 14px; padding: 10px;">
-            <div style="font-size: 0.60rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">⏳ Renda Futura (A Receber)</div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.15rem; font-weight: 800; color: #4ade80; margin: 4px 0;">+ R$ {total_renda_futura:,.2f}</div>
-            <div style="font-size: 0.60rem; color: #94a3b8; line-height: 1.25;">
-                Ainda não é patrimônio.<br>Noção c/ futuro: <strong style="color: #e2e8f0;">R$ {projecao_com_futuro:,.2f}</strong>
+        <div style="background: {bg_rf}; border: 1px dashed {borda_rf}; border-radius: 14px; padding: 10px;">
+            <div style="font-size: 0.60rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">⏳ Renda Futura Livre</div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.12rem; font-weight: 800; color: {cor_rf}; margin: 4px 0;">{sinal_rf} R$ {abs(renda_futura_livre):,.2f}</div>
+            <div style="font-size: 0.58rem; color: #94a3b8; line-height: 1.25;">
+                Bruto: R$ {(entradas_futuras_brutas + reembolsos_livres_futuros):,.2f} • Comprom.: -R$ {saidas_comprometidas_ciclo:,.2f}<br>
+                Noção c/ futuro livre: <strong style="color: #e2e8f0;">R$ {projecao_com_futuro:,.2f}</strong>
             </div>
         </div>
     </div>
@@ -1662,25 +1723,31 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
 
     st.markdown('<div style="background: #0d1522; border: 1px solid #1e2d44; border-radius: 14px; padding: 12px; margin-top: 8px; margin-bottom: 12px;">', unsafe_allow_html=True)
     st.markdown('<div style="font-size: 0.8rem; font-weight: 800; color: #ffffff; margin-bottom: 8px;">1. Entrada Total de Reembolso Recebido:</div>', unsafe_allow_html=True)
-    status_reemb_sel = st.radio(
-        "Status deste Reembolso:",
-        ["⏳ Reembolso Futuro (Ainda vai cair na conta)", "✅ Já Caiu na Conta Agora"],
-        horizontal=True,
-        key="radio_status_reemb"
-    )
-    is_reemb_efetivado = ("Já Caiu" in status_reemb_sel)
-
     c_v1, c_v2 = st.columns(2)
     with c_v1:
-        data_receb = st.date_input("Data Prevista / Recebimento", value=date.today(), key="reemb_data_input")
+        data_receb = st.date_input("Data do Recebimento / Agendamento", value=date.today(), key="reemb_data_input")
     with c_v2:
         valor_total_recebido = st.number_input(
-            "Valor Total que Caiu (R$)", 
+            "Valor Total (R$)", 
             min_value=0.01, 
             step=10.0, 
             key="reemb_total_val",
             on_change=recalcular_diferenca_destinos
         )
+
+    is_reemb_efetivado = (data_receb <= date.today())
+    if is_reemb_efetivado:
+        st.markdown(f"""
+        <div style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 10px; padding: 7px 10px; margin: 6px 0 8px 0; font-size: 0.68rem; color: #4ade80;">
+            ✅ <strong>Data de hoje/passada ({data_receb.strftime('%d/%m/%Y')}):</strong> Os saldos, faturas ou cheque especial serão atualizados imediatamente.
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div style="background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 10px; padding: 7px 10px; margin: 6px 0 8px 0; font-size: 0.68rem; color: #eab308;">
+            ⏳ <strong>Data Futura ({data_receb.strftime('%d/%m/%Y')}):</strong> Não mexe no seu saldo/fatura hoje. Será abatido/creditado automaticamente no dia <strong>{data_receb.strftime('%d/%m/%Y')}</strong>!
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown(f'<div style="font-size: 0.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0 6px 0;">2. Configurar os {st.session_state.qtd_destinos} Destino(s):</div>', unsafe_allow_html=True)
     st.caption("Ao digitar o valor em um destino, a diferença restante é calculada automaticamente no próximo:")
@@ -1763,7 +1830,7 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
             if is_reemb_efetivado:
                 st.success(f"Reembolso de R$ {valor_total_recebido:,.2f} efetivado nos saldos e faturas!")
             else:
-                st.success(f"Reembolso futuro de R$ {valor_total_recebido:,.2f} agendado! Consulte o 🧠 Advisor para ver a melhor recomendação de alocação.")
+                st.success(f"Reembolso futuro de R$ {valor_total_recebido:,.2f} agendado para {data_receb.strftime('%d/%m/%Y')}! Ele só alterará seus saldos/faturas nessa data.")
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
