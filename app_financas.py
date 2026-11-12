@@ -290,7 +290,6 @@ st.markdown("""
         border-color: #38bdf8 !important;
         color: #ffffff !important;
     }
-    /* Botão Primário (Dias selecionados no Calendário e Ações Principais) em Ciano/Esmeralda Tecnológico, nunca vermelho */
     .stButton > button[kind="primary"] {
         background: linear-gradient(135deg, rgba(56, 189, 248, 0.22) 0%, rgba(16, 185, 129, 0.22) 100%) !important;
         border: 1px solid #38bdf8 !important;
@@ -305,6 +304,11 @@ st.markdown("""
     .btn-clear button:hover {
         background: rgba(244, 63, 94, 0.16) !important;
         border-color: #f43f5e !important;
+    }
+    .btn-action-icon button {
+        background: rgba(56, 189, 248, 0.08) !important;
+        color: #38bdf8 !important;
+        border: 1px solid rgba(56, 189, 248, 0.25) !important;
     }
 
     /* Grade do Calendário de Alocações 100% Responsiva (7 colunas fixas PC e Celular) */
@@ -389,6 +393,52 @@ st.markdown("""
         margin-top: 2px;
     }
 
+    /* Tabela do Calendário Visual do Ciclo */
+    .cal-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 4px;
+        margin-top: 8px;
+    }
+    .cal-th {
+        text-align: center;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.62rem;
+        font-weight: 700;
+        color: #64748b;
+        padding: 4px 0;
+    }
+    .cal-cell {
+        background: #080c14;
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        border-radius: 8px;
+        height: 48px;
+        vertical-align: top;
+        padding: 4px;
+        text-align: right;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.64rem;
+        font-weight: 600;
+    }
+    .cal-cell.payday { border-color: #eab308 !important; box-shadow: inset 0 0 6px rgba(234, 179, 8, 0.25); }
+    .cal-cell.today { border-color: #38bdf8 !important; box-shadow: 0 0 6px rgba(56, 189, 248, 0.35); }
+    .cal-cell.has-entrada { background: rgba(16, 185, 129, 0.14) !important; border-color: rgba(16, 185, 129, 0.55) !important; }
+    .cal-cell.has-saida { background: rgba(244, 63, 94, 0.14) !important; border-color: rgba(244, 63, 94, 0.55) !important; }
+    .cal-cell.has-reemb-livre { background: rgba(234, 179, 8, 0.14) !important; border-color: rgba(234, 179, 8, 0.65) !important; }
+    .cal-cell.has-ambos { background: rgba(245, 158, 11, 0.14) !important; border-color: rgba(245, 158, 11, 0.55) !important; }
+    .cal-badge {
+        font-size: 0.54rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        display: block;
+        text-align: left;
+        margin-top: 2px;
+        line-height: 1.1;
+    }
+    .badge-in { color: #34d399; }
+    .badge-out { color: #fb7185; }
+    .badge-reemb-livre { color: #fbbf24; }
+
     /* Inputs compactos */
     div[data-testid="stNumberInput"] input,
     div[data-testid="stTextInput"] input {
@@ -397,6 +447,30 @@ st.markdown("""
         background-color: #080c14 !important;
         border-radius: 8px !important;
     }
+
+    /* Abas limpas */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+        background-color: #0b101b;
+        padding: 4px;
+        border-radius: 10px;
+        border: 1px solid var(--border-subtle);
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 32px;
+        border-radius: 7px;
+        color: #94a3b8;
+        font-size: 0.74rem;
+        font-weight: 600;
+        border: none !important;
+        background: transparent;
+        padding: 0 12px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: rgba(56, 189, 248, 0.12) !important;
+        color: #38bdf8 !important;
+    }
+    .stTabs [data-baseweb="tab-highlight"] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1204,6 +1278,23 @@ def get_status_saldo(saldo):
     else:
         return "🚀 Modo patrão ativado", "msg-success"
 
+
+def pagar_fatura_cartao(banco_cartao, banco_pagador, valor_pagar):
+    valor_pagar = float(valor_pagar)
+    if valor_pagar <= 0:
+        return
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    dt_fmt = datetime.now().strftime("%d/%m %H:%M")
+    c.execute("UPDATE contas_bancarias SET saldo_conta = saldo_conta - ? WHERE banco = ?", (valor_pagar, banco_pagador))
+    c.execute("UPDATE contas_bancarias SET fatura_atual = MAX(0.0, fatura_atual - ?) WHERE banco = ?", (valor_pagar, banco_cartao))
+    c.execute("""
+        INSERT INTO transacoes (data, descricao, valor, categoria, tipo, banco, meio)
+        VALUES (?, ?, ?, 'Fatura', 'Saída', ?, 'Conta Corrente / Pix')
+    """, (dt_fmt, f"Pagamento Fatura {banco_cartao}", valor_pagar, banco_pagador))
+    conn.commit()
+    conn.close()
+
 df_bancos = get_contas()
 df_tx = get_transacoes()
 df_prev = get_previstos()
@@ -1266,7 +1357,7 @@ if "modo_ciclo" not in st.session_state or st.session_state.modo_ciclo not in ["
     st.session_state.modo_ciclo = "Ciclo Completo (04 a 03)"
 
 
-# Garante valores padrão corretos para os parâmetros da alocação (nunca 0.00 na inicialização)
+# Garante valores padrão corretos para os parâmetros da alocação
 if st.session_state.get("inp_diaria_aloc", 0.0) == 0.0:
     st.session_state.inp_diaria_aloc = 128.78
 if st.session_state.get("inp_gas_aloc", 0.0) == 0.0:
@@ -1297,6 +1388,7 @@ with st.sidebar:
         "Ciclo & Previsões",
         "Cartões & Parcelas",
         "Extrato & OFX",
+        "Diagnóstico & PDF",
         "Configurações"
     ]
     if st.session_state.menu_nav not in opcoes_menu:
@@ -1348,7 +1440,6 @@ if not df_reemb_itens.empty:
 renda_futura_livre = (entradas_futuras_brutas - saidas_comprometidas_ciclo) + reembolsos_livres_futuros
 projecao_com_futuro = total_saldos + renda_futura_livre
 
-# Resumo Alocações do Mês do Calendário de Alocação
 if "aloc_cal_mes" not in st.session_state:
     st.session_state.aloc_cal_mes = st.session_state.cal_mes
 if "aloc_cal_ano" not in st.session_state:
@@ -1434,7 +1525,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ================= GRÁFICO SVG TECNOLÓGICO (SUBSTITUI BAR_CHART INFANTIL) =================
+# ================= GRÁFICO SVG TECNOLÓGICO =================
 def render_tech_chart_svg():
     st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
     st.markdown("""
@@ -1657,7 +1748,7 @@ def render_calendario_alocacoes_e_calc():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ================= HELPER DO AI ADVISOR =================
+# ================= HELPER DO AI ADVISOR COMPLETO =================
 def render_advisor_box():
     st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
     st.markdown("""
@@ -1729,6 +1820,15 @@ def render_advisor_box():
         if total_parcelas_mes > 0:
             st.info(f"Comprometimento mensal em parcelas: R$ {total_parcelas_mes:,.2f} (Passivo total: R$ {total_divida_parcelas:,.2f}).")
 
+    # Reembolsos futuros em conta
+    reemb_fut_cc = pd.DataFrame()
+    if not df_reemb_itens.empty:
+        reemb_fut_cc = df_reemb_itens[(df_reemb_itens.get("status", "Efetivado") == "Previsto") & (df_reemb_itens["acao"] == "Creditar em Conta Corrente")]
+    if not reemb_fut_cc.empty:
+        with st.expander("Alocação de Reembolsos Futuros em Conta", expanded=False):
+            tot_r_cc = float(reemb_fut_cc["valor"].sum())
+            st.info(f"Você possui R$ {tot_r_cc:,.2f} previstos para Conta Corrente. Priorize zerar cheque especial ou manter como capital de giro para combustível.")
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ================= PÁGINAS =================
@@ -1755,7 +1855,7 @@ if st.session_state.menu_nav == "Overview":
     elif df_tx.empty:
         st.caption("Nenhuma movimentação registrada.")
     else:
-        for _, row in df_tx.head(6).iterrows():
+        for _, row in df_tx.head(8).iterrows():
             is_s = row["tipo"] == "Saída"
             st.markdown(f"""
             <div class="ledger-row">
@@ -1794,13 +1894,27 @@ elif st.session_state.menu_nav == "Bancos & Contas":
                 <div class="bank-grid">
                     <div class="bank-stat"><div class="bank-stat-lbl">Saldo Conta</div><div class="bank-stat-val">R$ {b_saldo:,.2f}</div></div>
                     <div class="bank-stat"><div class="bank-stat-lbl">Cheque Especial</div><div class="bank-stat-val" style="color:{'#fb7185' if b['cheque_especial_usado']>0 else '#94a3b8'};">R$ {b['cheque_especial_usado']:,.2f}</div></div>
-                    {f'<div class="bank-stat"><div class="bank-stat-lbl">Fatura (Dia {int(b.get("dia_vencimento",10))})</div><div class="bank-stat-val" style="color:#fb7185;">R$ {b["fatura_atual"]:,.2f}</div></div><div class="bank-stat"><div class="bank-stat-lbl">Limite Livre</div><div class="bank-stat-val" style="color:#34d399;">R$ {lim_exib:,.2f}</div></div>' if tem_c else ''}
+                    {f'<div class="bank-stat"><div class="bank-stat-lbl">Fatura (Venc {int(b.get("dia_vencimento",10))} / Fech {int(b.get("dia_fechamento",3))})</div><div class="bank-stat-val" style="color:#fb7185;">R$ {b["fatura_atual"]:,.2f}</div></div><div class="bank-stat"><div class="bank-stat-lbl">Limite Livre / Total</div><div class="bank-stat-val" style="color:#34d399;">R$ {lim_exib:,.2f} <span style="font-size:0.65rem;color:#64748b;">/ {lim_tot:,.0f}</span></div></div>' if tem_c else ''}
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
+            if tem_c and float(b["fatura_atual"]) > 0:
+                with st.expander(f"Pagar Fatura {b['banco']} (R$ {b['fatura_atual']:,.2f})", expanded=False):
+                    cp1, cp2 = st.columns(2)
+                    with cp1:
+                        b_pag = st.selectbox("Debitar de qual conta?", df_bancos["banco"].tolist(), key=f"pag_fat_src_{b['banco']}")
+                    with cp2:
+                        v_pag = st.number_input("Valor a Pagar (R$)", min_value=0.01, value=float(b["fatura_atual"]), step=10.0, key=f"pag_fat_val_{b['banco']}")
+                    if st.button("Confirmar Pagamento", key=f"btn_pag_fat_{b['banco']}", type="primary"):
+                        pagar_fatura_cartao(b["banco"], b_pag, v_pag)
+                        st.success("Fatura abatida com sucesso!")
+                        st.rerun()
+
 elif st.session_state.menu_nav == "Reembolsos & Rateio":
     st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-hdr"><span class="panel-hdr-title">◈ Rateio & Destinação de Reembolso KM</span><span class="panel-hdr-sub">AUTO-DISTRIBUIÇÃO</span></div>', unsafe_allow_html=True)
+
     if st.button("Ocultar Formulário" if st.session_state.mostrar_form_rateio else "Novo Rateio de Reembolso", key="toggle_rat_page"):
         st.session_state.mostrar_form_rateio = not st.session_state.mostrar_form_rateio
         st.rerun()
@@ -1822,15 +1936,15 @@ elif st.session_state.menu_nav == "Reembolsos & Rateio":
                 s_ant = sum(float(st.session_state.get(f"v_{lets[i]}", 0.0)) for i in range(qtd - 1))
                 st.session_state[f"v_{lets[qtd-1]}"] = round(max(0.0, tot - s_ant), 2)
 
-        c_q1, c_q2 = st.columns(2)
+        c_q1, c_q2, c_q3 = st.columns([1.2, 1.2, 1])
         with c_q1: data_receb = st.date_input("Data Recebimento", value=date.today(), key="reemb_dt_pg")
         with c_q2: val_tot_r = st.number_input("Valor Total (R$)", min_value=0.01, step=10.0, key="reemb_total_val", on_change=recalc_dest)
-
-        qtd_esc = st.selectbox("Destinos", [1, 2, 3, 4, 5], index=[1, 2, 3, 4, 5].index(st.session_state.qtd_destinos))
-        if qtd_esc != st.session_state.qtd_destinos:
-            st.session_state.qtd_destinos = qtd_esc
-            recalc_dest()
-            st.rerun()
+        with c_q3:
+            qtd_esc = st.selectbox("Destinos", [1, 2, 3, 4, 5], index=[1, 2, 3, 4, 5].index(st.session_state.qtd_destinos))
+            if qtd_esc != st.session_state.qtd_destinos:
+                st.session_state.qtd_destinos = qtd_esc
+                recalc_dest()
+                st.rerun()
 
         dests = []
         b_list = df_bancos["banco"].tolist()
@@ -1839,94 +1953,490 @@ elif st.session_state.menu_nav == "Reembolsos & Rateio":
         for i in range(st.session_state.qtd_destinos):
             lt = lets[i]
             is_ult = (i == st.session_state.qtd_destinos - 1)
-            c1, c2, c3 = st.columns([1.3, 1, 1.5])
+            c1, c2, c3, c4 = st.columns([1.2, 1, 1.5, 1.5])
             with c1: bd = st.selectbox(f"Banco ({lt})", b_list, index=min(i, len(b_list)-1), key=f"b_{lt}")
             with c2: vd = st.number_input(f"Valor ({lt})", min_value=0.0, step=10.0, key=f"v_{lt}", on_change=(recalc_dest if not is_ult else None))
             with c3: ad = st.selectbox(f"Ação ({lt})", ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"], index=min(i, 2), key=f"ac_{lt}")
-            md = st.text_input(f"Motivo ({lt})", value=mots[i], key=f"m_{lt}")
+            with c4: md = st.text_input(f"Motivo ({lt})", value=mots[i], key=f"m_{lt}")
             dests.append({"banco": bd, "acao": ad, "valor": vd, "motivo": md})
+
+        soma_at = sum(d["valor"] for d in dests)
+        dif_at = val_tot_r - soma_at
+        st.caption(f"Distribuído: **R$ {soma_at:,.2f}** / R$ {val_tot_r:,.2f} • Diferença: **R$ {dif_at:,.2f}**")
 
         if st.button("Executar Rateio", type="primary"):
             ativos = [d for d in dests if d["valor"] > 0]
             if ativos:
                 aplicar_destinacao_reembolso(data_receb.strftime("%Y-%m-%d"), val_tot_r, ativos, efetivar_agora=(data_receb <= date.today()))
                 st.session_state.mostrar_form_rateio = False
+                st.success("Rateio executado!")
                 st.rerun()
 
+    # Destinações Ativas recolhíveis com Edição, Baixa e Estorno
     df_itens_hist = get_reembolsos_itens()
     if not df_itens_hist.empty:
         cda1, cda2 = st.columns([4, 1.2])
-        with cda1: st.markdown(f'<div class="panel-hdr-title" style="margin-top:10px;">◈ Destinações Ativas ({len(df_itens_hist)})</div>', unsafe_allow_html=True)
+        with cda1: st.markdown(f'<div class="panel-hdr-title" style="margin-top:12px;">◈ Destinações Ativas ({len(df_itens_hist)})</div>', unsafe_allow_html=True)
         with cda2:
             if st.button("Expandir" if st.session_state.recolher_dest_reemb else "Recolher", key="rec_da_pg"):
                 st.session_state.recolher_dest_reemb = not st.session_state.recolher_dest_reemb
                 st.rerun()
-        if not st.session_state.recolher_dest_reemb:
+
+        if st.session_state.recolher_dest_reemb:
+            st.caption(f"Lista recolhida ({len(df_itens_hist)} itens). Clique em Expandir para visualizar.")
+        else:
+            if st.session_state.editando_reemb_id is not None:
+                reemb_ed_df = df_itens_hist[df_itens_hist["id"] == st.session_state.editando_reemb_id]
+                if not reemb_ed_df.empty:
+                    r_ed = reemb_ed_df.iloc[0]
+                    with st.form("form_ed_reemb_pro"):
+                        st.markdown(f"**Editando Destinação #{r_ed['id']}**")
+                        try: dt_b = datetime.strptime(str(r_ed["data"]), "%Y-%m-%d").date()
+                        except: dt_b = date.today()
+                        ce1, ce2, ce3 = st.columns(3)
+                        with ce1:
+                            ed_dt = st.date_input("Data", value=dt_b)
+                            b_l = df_bancos["banco"].tolist()
+                            ed_bc = st.selectbox("Banco", b_l, index=b_l.index(r_ed["banco"]) if r_ed["banco"] in b_l else 0)
+                        with ce2:
+                            ed_vl = st.number_input("Valor", min_value=0.01, value=float(r_ed["valor"]), step=10.0)
+                            ac_l = ["Pagar/Abater Fatura de Cartão", "Abater Cheque Especial", "Creditar em Conta Corrente"]
+                            ed_ac = st.selectbox("Ação", ac_l, index=ac_l.index(r_ed["acao"]) if r_ed["acao"] in ac_l else 0)
+                        with ce3:
+                            ed_mt = st.text_input("Motivo", value=str(r_ed["motivo"]))
+                        sb1, sb2 = st.columns(2)
+                        with sb1:
+                            if st.form_submit_button("Salvar"):
+                                atualizar_item_destino(int(r_ed["id"]), ed_dt.strftime("%Y-%m-%d"), ed_bc, ed_ac, ed_vl, ed_mt)
+                                st.session_state.editando_reemb_id = None
+                                st.rerun()
+                        with sb2:
+                            if st.form_submit_button("Cancelar"):
+                                st.session_state.editando_reemb_id = None
+                                st.rerun()
+
             for _, item in df_itens_hist.iterrows():
-                ci, cb = st.columns([4.5, 1])
+                st_it = item.get("status", "Efetivado")
+                cor_it = "#fbbf24" if st_it == "Previsto" else "#34d399"
+                ci, cb1, cb2, cb3 = st.columns([4.2, 0.7, 0.7, 0.7])
                 with ci:
-                    st.markdown(f'<div class="ledger-row"><div><strong>{item["banco"]}</strong> · {item["motivo"]}<br><span style="font-size:0.64rem;color:#64748b;">{item["data"]} · {item["acao"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:#34d399;">R$ {item["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
-                with cb:
+                    st.markdown(f'<div class="ledger-row" style="border-left:3px solid {cor_it};"><div><strong>{item["banco"]}</strong> · {item["motivo"]}<br><span style="font-family:JetBrains Mono;font-size:0.62rem;color:#64748b;">{item["data"]} · {item["acao"]} · {st_it.upper()}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{cor_it};">R$ {item["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+                with cb1:
+                    if st.button("Editar", key=f"ed_r_pg_{item['id']}"):
+                        st.session_state.editando_reemb_id = int(item["id"])
+                        st.rerun()
+                with cb2:
+                    if st_it == "Previsto":
+                        if st.button("Baixar", key=f"ef_r_pg_{item['id']}"):
+                            efetivar_reembolso_item(item["id"])
+                            st.rerun()
+                with cb3:
+                    st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
                     if st.button("Estornar", key=f"est_pg_{item['id']}"):
                         estornar_item_destino(item["id"])
                         st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 elif st.session_state.menu_nav == "Ciclo & Previsões":
     st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
-    st.markdown(f'<div class="panel-hdr-title">◈ Ciclo {nome_mes_glob}/{st.session_state.cal_ano} ({dt_hero_ini.strftime("%d/%m")} → {dt_hero_fim.strftime("%d/%m")})</div>', unsafe_allow_html=True)
-    df_prev_c = df_prev[df_prev["data_prevista"].apply(lambda d: dt_hero_ini <= datetime.strptime(d, "%Y-%m-%d").date() <= dt_hero_fim)] if not df_prev.empty else pd.DataFrame()
+    c_top1, c_top2, c_top3, c_top4 = st.columns([2.5, 1.5, 0.8, 0.8])
+    with c_top1:
+        st.markdown(f'<div class="panel-hdr-title" style="padding-top:4px;">◈ Ciclo {nome_mes_glob}/{st.session_state.cal_ano}</div>', unsafe_allow_html=True)
+    with c_top2:
+        opcoes_ciclo = ["Ciclo Completo (04 a 03)", "1ª Parte (Dia 04 a 15)", "2ª Parte (Dia 16 a 03)"]
+        modo_sel = st.selectbox("Apuração", opcoes_ciclo, index=opcoes_ciclo.index(st.session_state.modo_ciclo), label_visibility="collapsed")
+        if modo_sel != st.session_state.modo_ciclo:
+            st.session_state.modo_ciclo = modo_sel
+            st.rerun()
+    with c_top3:
+        if st.button("◀", key="cic_ant_pg"):
+            st.session_state.cal_mes = 12 if st.session_state.cal_mes == 1 else st.session_state.cal_mes - 1
+            if st.session_state.cal_mes == 12: st.session_state.cal_ano -= 1
+            st.rerun()
+    with c_top4:
+        if st.button("▶", key="cic_prox_pg"):
+            st.session_state.cal_mes = 1 if st.session_state.cal_mes == 12 else st.session_state.cal_mes + 1
+            if st.session_state.cal_mes == 1: st.session_state.cal_ano += 1
+            st.rerun()
+
+    dt_ciclo_ini, dt_ciclo_fim, dt_salario_03 = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, st.session_state.modo_ciclo)
+    dt_full_ini, dt_full_fim, _ = get_intervalo_ciclo(st.session_state.cal_ano, st.session_state.cal_mes, "Ciclo Completo (04 a 03)")
+
+    df_prev_c = df_prev[df_prev["data_prevista"].apply(lambda d: dt_ciclo_ini <= datetime.strptime(d, "%Y-%m-%d").date() <= dt_ciclo_fim)] if not df_prev.empty else pd.DataFrame()
+    df_reemb_c = df_reemb_itens[df_reemb_itens["data"].apply(lambda d: dt_ciclo_ini <= datetime.strptime(d, "%Y-%m-%d").date() <= dt_ciclo_fim)] if not df_reemb_itens.empty else pd.DataFrame()
+
+    ent_base = float(df_prev_c[df_prev_c["tipo"] == "Entrada"]["valor"].sum()) if not df_prev_c.empty else 0.0
+    sai_base = float(df_prev_c[df_prev_c["tipo"] == "Saída"]["valor"].sum()) if not df_prev_c.empty else 0.0
+    reemb_tot_c = float(df_reemb_c["valor"].sum()) if not df_reemb_c.empty else 0.0
+    reemb_comp_c = float(df_reemb_c[df_reemb_c["acao"] != "Creditar em Conta Corrente"]["valor"].sum()) if not df_reemb_c.empty else 0.0
+
+    ent_tot_c = ent_base + reemb_tot_c
+    sai_tot_c = sai_base + reemb_comp_c
+    proj_c = total_saldos + ent_tot_c - sai_tot_c
+
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0;">
+        <div class="bank-stat"><div class="bank-stat-lbl">A Receber (Bruto)</div><div class="bank-stat-val" style="color:#34d399;">+ R$ {ent_tot_c:,.2f}</div></div>
+        <div class="bank-stat"><div class="bank-stat-lbl">Saídas + Destinados</div><div class="bank-stat-val" style="color:#fb7185;">- R$ {sai_tot_c:,.2f}</div></div>
+        <div class="bank-stat"><div class="bank-stat-lbl">Saldo Atual</div><div class="bank-stat-val">R$ {total_saldos:,.2f}</div></div>
+        <div class="bank-stat"><div class="bank-stat-lbl">Projeção Final</div><div class="bank-stat-val" style="color:{'#34d399' if proj_c >= 0 else '#fb7185'};">R$ {proj_c:,.2f}</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Calendário Visual do Ciclo (04/MM a 03/MM+1)
+    eventos_por_data = {}
+    if not df_prev.empty:
+        for _, row in df_prev.iterrows():
+            try:
+                dt_obj = datetime.strptime(row["data_prevista"], "%Y-%m-%d").date()
+                if dt_full_ini <= dt_obj <= dt_full_fim:
+                    ev_dict = row.to_dict()
+                    ev_dict["papel_cal"] = "EntradaLivre" if row["tipo"] == "Entrada" else "SaidaComprometida"
+                    eventos_por_data.setdefault(dt_obj, []).append(ev_dict)
+            except:
+                pass
+
+    if not df_reemb_itens.empty:
+        reemb_por_data_rows = {}
+        for _, row_r in df_reemb_itens.iterrows():
+            try:
+                dt_r = datetime.strptime(row_r["data"], "%Y-%m-%d").date()
+                if dt_full_ini <= dt_r <= dt_full_fim:
+                    reemb_por_data_rows.setdefault(dt_r, []).append(row_r)
+            except:
+                pass
+        for dt_r, lista_r in reemb_por_data_rows.items():
+            soma_dest = sum(float(x["valor"]) for x in lista_r if x["acao"] != "Creditar em Conta Corrente")
+            if soma_dest > 0:
+                eventos_por_data.setdefault(dt_r, []).append({"valor": soma_dest, "papel_cal": "EntradaCobertura"})
+            for r_item in lista_r:
+                if r_item["acao"] == "Creditar em Conta Corrente":
+                    eventos_por_data.setdefault(dt_r, []).append({"valor": r_item["valor"], "papel_cal": "ReembSemDestino"})
+                else:
+                    eventos_por_data.setdefault(dt_r, []).append({"valor": r_item["valor"], "papel_cal": "SaidaComprometida"})
+
+    start_grid = dt_full_ini - timedelta(days=dt_full_ini.weekday())
+    end_grid = dt_full_fim + timedelta(days=(6 - dt_full_fim.weekday()))
+    html_cal = '<table class="cal-table"><thead><tr>' + ''.join(f'<th class="cal-th">{d}</th>' for d in ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"]) + '</tr></thead><tbody>'
+    cur_dt = start_grid
+    while cur_dt <= end_grid:
+        html_cal += '<tr>'
+        for _ in range(7):
+            if not (dt_full_ini <= cur_dt <= dt_full_fim):
+                html_cal += f'<td class="cal-cell" style="opacity:0.2;"><span style="color:#64748b;">{cur_dt.day:02d}/{cur_dt.month:02d}</span></td>'
+            else:
+                classes = ["cal-cell"]
+                if cur_dt == hoje: classes.append("today")
+                if cur_dt.day in [3, 16]: classes.append("payday")
+                badges_html = ""
+                if cur_dt in eventos_por_data:
+                    evs = eventos_por_data[cur_dt]
+                    t_in = any(e["papel_cal"] == "EntradaLivre" for e in evs)
+                    t_am = any(e["papel_cal"] == "ReembSemDestino" for e in evs)
+                    t_out = any(e["papel_cal"] == "SaidaComprometida" for e in evs)
+                    if (t_in or t_am) and t_out: classes.append("has-ambos")
+                    elif t_out: classes.append("has-saida")
+                    elif t_am: classes.append("has-reemb-livre")
+                    elif t_in: classes.append("has-entrada")
+                    for ev in evs:
+                        p = ev["papel_cal"]
+                        cb = "badge-out" if p == "SaidaComprometida" else ("badge-reemb-livre" if p == "ReembSemDestino" else "badge-in")
+                        sb = "-" if p == "SaidaComprometida" else "+"
+                        badges_html += f'<span class="cal-badge {cb}">{sb}{ev["valor"]:,.0f}</span>'
+                lbl_d = f"{cur_dt.day:02d}/{cur_dt.month:02d}" if cur_dt.month != st.session_state.cal_mes else f"{cur_dt.day:02d}"
+                cor_n = "#eab308" if cur_dt.day in [3, 16] else ("#38bdf8" if cur_dt == hoje else "#94a3b8")
+                html_cal += f'<td class="{" ".join(classes)}"><span style="color:{cor_n};">{lbl_d}</span>{badges_html}</td>'
+            cur_dt += timedelta(days=1)
+        html_cal += '</tr>'
+    html_cal += '</tbody></table>'
+    st.markdown(html_cal, unsafe_allow_html=True)
+
+    # Formulário recolhível de Novo Lançamento Previsto
+    ca_b1, ca_b2 = st.columns([3, 1])
+    with ca_b1:
+        if st.button("Ocultar Formulário" if st.session_state.mostrar_form_prev else "Agendar Novo Lançamento", key="tog_fp_pg"):
+            st.session_state.mostrar_form_prev = not st.session_state.mostrar_form_prev
+            st.rerun()
+    with ca_b2:
+        st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+        if st.button("Limpar Todos", key="limp_all_p_pg"):
+            limpar_todas_previsoes()
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if st.session_state.mostrar_form_prev:
+        with st.form("form_add_prev_pro"):
+            cp1, cp2, cp3 = st.columns(3)
+            with cp1:
+                d_sel = st.date_input("Data Início", value=date.today())
+                t_sel = st.selectbox("Tipo", ["Entrada", "Saída"])
+            with cp2:
+                v_sel = st.number_input("Valor (R$)", min_value=0.01, value=1500.00, step=50.0)
+                b_sel = st.selectbox("Banco", df_bancos["banco"].tolist())
+            with cp3:
+                ds_sel = st.text_input("Descrição", value="Salário / Conta")
+                ct_sel = st.selectbox("Categoria", ["Salário", "Renda", "Fatura", "Contas Fixas", "Lazer", "Outros"])
+            fx_chk = st.checkbox("Recorrente (Fixo)", value=True)
+            m_qtd = st.slider("Repetir por quantos meses?", 1, 12, 1)
+            if st.form_submit_button("Confirmar Agendamento"):
+                adicionar_previsto(d_sel.strftime("%Y-%m-%d"), ds_sel, v_sel, ct_sel, t_sel, b_sel, m_qtd, 1 if fx_chk else 0)
+                st.session_state.mostrar_form_prev = False
+                st.rerun()
+
+    # Lista recolhível de Lançamentos do Ciclo
     clc1, clc2 = st.columns([4, 1.2])
-    with clc1: st.markdown(f"**Lançamentos do Ciclo ({len(df_prev_c)})**")
+    with clc1: st.markdown(f'<div class="panel-hdr-title" style="margin-top:10px;">◈ Lançamentos do Ciclo ({len(df_prev_c)})</div>', unsafe_allow_html=True)
     with clc2:
         if st.button("Expandir" if st.session_state.recolher_lanc_ciclo else "Recolher", key="rec_lc_pg"):
             st.session_state.recolher_lanc_ciclo = not st.session_state.recolher_lanc_ciclo
             st.rerun()
-    if not st.session_state.recolher_lanc_ciclo:
+
+    if st.session_state.recolher_lanc_ciclo:
+        st.caption(f"Lista recolhida ({len(df_prev_c)} itens). Clique em Expandir para visualizar.")
+    else:
         for _, rp in df_prev_c.iterrows():
             is_e = rp["tipo"] == "Entrada"
-            c1, c2, c3 = st.columns([4, 1, 1])
-            with c1: st.markdown(f'<div class="ledger-row"><div><strong>{rp["descricao"]}</strong><br><span style="font-size:0.64rem;color:#64748b;">{rp["data_prevista"]} · {rp["banco"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{"#34d399" if is_e else "#fb7185"};">{"+" if is_e else "-"} R$ {rp["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns([4.4, 0.8, 0.8])
+            with c1: st.markdown(f'<div class="ledger-row"><div><strong>{rp["descricao"]}</strong><br><span style="font-family:JetBrains Mono;font-size:0.62rem;color:#64748b;">{rp["data_prevista"]} · {rp["banco"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{"#34d399" if is_e else "#fb7185"};">{"+" if is_e else "-"} R$ {rp["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
             with c2:
                 if st.button("Baixar", key=f"ef_pg_{rp['id']}"):
                     efetivar_previsto(rp["id"])
                     st.rerun()
             with c3:
+                st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
                 if st.button("Excluir", key=f"dl_pg_{rp['id']}"):
                     remover_previsto(rp["id"])
                     st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 elif st.session_state.menu_nav == "Cartões & Parcelas":
     st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-hdr"><span class="panel-hdr-title">◈ Controle de Compras Parceladas</span><span class="panel-hdr-sub">CRÉDITO ATIVO</span></div>', unsafe_allow_html=True)
+
+    tot_m_p = float(df_parc["valor_parcela"].sum()) if not df_parc.empty else 0.0
+    tot_r_p = sum((r["total_parcelas"] - r["parcela_atual"]) * r["valor_parcela"] for _, r in df_parc.iterrows()) if not df_parc.empty else 0.0
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div class="bank-stat"><div class="bank-stat-lbl">Comprometido no Mês</div><div class="bank-stat-val" style="color:#38bdf8;">R$ {tot_m_p:,.2f}</div></div>
+        <div class="bank-stat"><div class="bank-stat-lbl">Saldo Devedor Restante</div><div class="bank-stat-val" style="color:#fbbf24;">R$ {tot_r_p:,.2f}</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button("Ocultar Formulário" if st.session_state.mostrar_form_parc else "Cadastrar Nova Compra Parcelada", key="tog_fparc_pg"):
+        st.session_state.mostrar_form_parc = not st.session_state.mostrar_form_parc
+        st.rerun()
+
+    if st.session_state.mostrar_form_parc:
+        with st.form("form_add_parc_pro"):
+            b_cards = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist() or df_bancos["banco"].tolist()
+            cp1, cp2, cp3 = st.columns(3)
+            with cp1:
+                bp = st.selectbox("Cartão", b_cards)
+                vp = st.number_input("Valor Parcela (R$)", min_value=0.01, value=150.0, step=10.0)
+            with cp2:
+                pa = st.number_input("Parcela Atual", min_value=1, max_value=60, value=1)
+                pt = st.number_input("Total Parcelas", min_value=1, max_value=60, value=10)
+            with cp3:
+                dp = st.text_input("Descrição", value="Compra Parcelada")
+                cp = st.selectbox("Categoria", ["Eletrônicos", "Casa", "Vestuário", "Veículo", "Saúde", "Outros"])
+            if st.form_submit_button("Salvar Compra Parcelada"):
+                adicionar_parcela(bp, dp, vp, pa, pt, cp)
+                st.session_state.mostrar_form_parc = False
+                st.rerun()
+
     cpl1, cpl2 = st.columns([4, 1.2])
-    with cpl1: st.markdown(f'<div class="panel-hdr-title">◈ Compras Parceladas ({len(df_parc)})</div>', unsafe_allow_html=True)
+    with cpl1: st.markdown(f'<div class="panel-hdr-title" style="margin-top:10px;">◈ Lista de Parcelas ({len(df_parc)})</div>', unsafe_allow_html=True)
     with cpl2:
         if st.button("Expandir" if st.session_state.recolher_parc_lista else "Recolher", key="rec_pl_pg"):
             st.session_state.recolher_parc_lista = not st.session_state.recolher_parc_lista
             st.rerun()
-    if not st.session_state.recolher_parc_lista:
+
+    if st.session_state.recolher_parc_lista:
+        st.caption(f"Lista recolhida ({len(df_parc)} compra(s)). Clique em Expandir para visualizar.")
+    else:
         for _, rpc in df_parc.iterrows():
             pct = min(100.0, (rpc["parcela_atual"] / max(1, rpc["total_parcelas"])) * 100)
-            st.markdown(f'<div class="ledger-row"><div><strong>{rpc["descricao"]} ({rpc["banco"]})</strong><br><span style="font-size:0.64rem;color:#64748b;">Parcela {rpc["parcela_atual"]}/{rpc["total_parcelas"]} · Fim {rpc["mes_ano_fim"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:#38bdf8;">R$ {rpc["valor_parcela"]:,.2f}</div></div>', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns([4.2, 1.1, 0.7])
+            with c1:
+                st.markdown(f'<div class="ledger-row"><div><strong>{rpc["descricao"]} ({rpc["banco"]})</strong><br><span style="font-family:JetBrains Mono;font-size:0.62rem;color:#64748b;">{rpc["parcela_atual"]}/{rpc["total_parcelas"]} ({pct:.0f}%) · Fim {rpc["mes_ano_fim"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:#38bdf8;">R$ {rpc["valor_parcela"]:,.2f}</div></div>', unsafe_allow_html=True)
+            with c2:
+                if rpc["parcela_atual"] < rpc["total_parcelas"]:
+                    if st.button(f"+1 ({rpc['parcela_atual']+1}/{rpc['total_parcelas']})", key=f"av_p_{rpc['id']}"):
+                        avancar_parcela(rpc["id"])
+                        st.rerun()
+            with c3:
+                st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+                if st.button("Excluir", key=f"dl_pc_{rpc['id']}"):
+                    remover_parcela(rpc["id"])
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 elif st.session_state.menu_nav == "Extrato & OFX":
+    tab_ex1, tab_ex2, tab_ex3 = st.tabs(["Extrato & Filtros", "Lançamento Manual", "Importador OFX"])
+    with tab_ex1:
+        st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+        cf1, cf2, cf3 = st.columns([1.5, 1.5, 2])
+        with cf1: f_banco = st.selectbox("Filtrar Banco", ["Todos"] + df_bancos["banco"].tolist())
+        with cf2: f_tipo = st.selectbox("Filtrar Tipo", ["Todos", "Saída", "Entrada"])
+        with cf3: f_busca = st.text_input("Buscar descrição", placeholder="Ex: Uber, Mercado, Pix...")
+
+        df_tx_f = df_tx.copy()
+        if f_banco != "Todos" and not df_tx_f.empty: df_tx_f = df_tx_f[df_tx_f["banco"] == f_banco]
+        if f_tipo != "Todos" and not df_tx_f.empty: df_tx_f = df_tx_f[df_tx_f["tipo"] == f_tipo]
+        if f_busca.strip() and not df_tx_f.empty: df_tx_f = df_tx_f[df_tx_f["descricao"].str.contains(f_busca.strip(), case=False, na=False)]
+
+        ce1, ce2, ce3 = st.columns([3.5, 1.2, 1.2])
+        with ce1: st.markdown(f'<div class="panel-hdr-title">◈ Movimentações ({len(df_tx_f)})</div>', unsafe_allow_html=True)
+        with ce2:
+            if st.button("Expandir" if st.session_state.recolher_extrato_lista else "Recolher", key="rec_ext_pg"):
+                st.session_state.recolher_extrato_lista = not st.session_state.recolher_extrato_lista
+                st.rerun()
+        with ce3:
+            st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+            if st.button("Limpar Tudo", key="limp_ext_pg"):
+                limpar_extrato_completo()
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        if st.session_state.recolher_extrato_lista:
+            st.caption(f"Extrato recolhido ({len(df_tx_f)} registros). Clique em Expandir para visualizar.")
+        else:
+            for _, row in df_tx_f.iterrows():
+                is_s = row["tipo"] == "Saída"
+                ci, cd = st.columns([5.2, 0.8])
+                with ci:
+                    st.markdown(f'<div class="ledger-row"><div><strong>{row["descricao"]}</strong><br><span style="font-family:JetBrains Mono;font-size:0.62rem;color:#64748b;">{row["data"]} · {row["banco"]} ({row["meio"]}) · {row["categoria"]}</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{"#fb7185" if is_s else "#34d399"};">{"-" if is_s else "+"} R$ {row["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+                with cd:
+                    st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+                    if st.button("Excluir", key=f"dl_tx_pro_{row['id']}"):
+                        remover_transacao_extrato(int(row["id"]))
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with tab_ex2:
+        st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+        with st.form("form_manual_pro"):
+            cm1, cm2 = st.columns(2)
+            with cm1:
+                desc_m = st.text_input("Descrição", value="Compra / Pagamento")
+                val_m = st.number_input("Valor (R$)", min_value=0.01, value=25.00, step=1.0)
+                banco_m = st.selectbox("Banco", df_bancos["banco"].tolist())
+            with cm2:
+                meio_m = st.selectbox("Método", ["Cartão de Crédito", "Conta Corrente / Pix"])
+                cat_m = st.selectbox("Categoria", ["Alimentação", "Transporte", "Lazer", "Contas Fixas", "Saúde", "Outros"])
+                tipo_m = st.selectbox("Tipo", ["Saída", "Entrada"])
+            if st.form_submit_button("Registrar Transação"):
+                adicionar_transacao(datetime.now().strftime("%d/%m %H:%M"), desc_m, val_m, cat_m, banco_m, meio_m, tipo_m)
+                st.success("Registrado!")
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with tab_ex3:
+        st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
+        tipo_ofx = st.selectbox("Tipo de Arquivo OFX", ["Fatura de Cartão de Crédito", "Extrato de Conta Corrente"])
+        b_ofx_list = df_bancos[df_bancos["tem_cartao"] == 1]["banco"].tolist() if "Cartão" in tipo_ofx else df_bancos["banco"].tolist()
+        banco_alvo = st.selectbox("Banco", b_ofx_list or df_bancos["banco"].tolist())
+        up_ofx = st.file_uploader("Upload arquivo .OFX", type=["ofx"])
+        if up_ofx is not None:
+            raw_b = up_ofx.read()
+            try: txt_ofx = raw_b.decode("utf-8")
+            except: txt_ofx = raw_b.decode("latin-1", errors="replace")
+            trns_ofx, sal_led = parse_ofx_content(txt_ofx)
+            if trns_ofx:
+                tot_deb = sum(abs(t["valor"]) for t in trns_ofx if t["valor"] < 0)
+                tot_cred = sum(t["valor"] for t in trns_ofx if t["valor"] > 0)
+                st.info(f"{len(trns_ofx)} movimentações encontradas · Débitos: R$ {tot_deb:,.2f} · Créditos: R$ {tot_cred:,.2f}")
+                if st.button("Processar OFX", type="primary"):
+                    conn = sqlite3.connect("financas.db")
+                    c = conn.cursor()
+                    if "Cartão" in tipo_ofx:
+                        v_fat = abs(sal_led) if (sal_led is not None and sal_led != 0) else tot_deb
+                        c.execute("SELECT limite_cartao FROM contas_bancarias WHERE banco = ?", (banco_alvo,))
+                        r_b = c.fetchone()
+                        lim_t = r_b[0] if r_b else 0.0
+                        c.execute("UPDATE contas_bancarias SET fatura_atual = ?, limite_liberado = ? WHERE banco = ?", (v_fat, max(0.0, lim_t - v_fat), banco_alvo))
+                        for tr in trns_ofx:
+                            fid = tr.get("fitid", "")
+                            c.execute("SELECT COUNT(*) FROM transacoes WHERE fitid = ? AND banco = ? AND meio = 'Cartão de Crédito'", (fid, banco_alvo))
+                            if c.fetchone()[0] == 0:
+                                c.execute("INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo, fitid) VALUES (?, ?, ?, 'OFX / Cartão', ?, 'Cartão de Crédito', ?, ?)", (tr["data"], tr["descricao"], abs(tr["valor"]), banco_alvo, "Saída" if tr["valor"] < 0 else "Entrada", fid))
+                    else:
+                        v_sal = sal_led if sal_led is not None else (tot_cred - tot_deb)
+                        c.execute("UPDATE contas_bancarias SET saldo_conta = ? WHERE banco = ?", (v_sal, banco_alvo))
+                        for tr in trns_ofx:
+                            fid = tr.get("fitid", "")
+                            c.execute("SELECT COUNT(*) FROM transacoes WHERE fitid = ? AND banco = ? AND meio = 'Conta Corrente / Pix'", (fid, banco_alvo))
+                            if c.fetchone()[0] == 0:
+                                c.execute("INSERT INTO transacoes (data, descricao, valor, categoria, banco, meio, tipo, fitid) VALUES (?, ?, ?, 'OFX / Conta', ?, 'Conta Corrente / Pix', ?, ?)", (tr["data"], tr["descricao"], abs(tr["valor"]), banco_alvo, "Saída" if tr["valor"] < 0 else "Entrada", fid))
+                    conn.commit()
+                    conn.close()
+                    st.success("OFX importado com sucesso!")
+                    st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+elif st.session_state.menu_nav == "Diagnóstico & PDF":
+    render_advisor_box()
     st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
-    st.markdown(f'<div class="panel-hdr-title">◈ Extrato Completo ({len(df_tx)})</div>', unsafe_allow_html=True)
-    if st.button("Expandir Extrato" if st.session_state.recolher_extrato_lista else "Recolher Extrato", key="rec_ext_pg"):
-        st.session_state.recolher_extrato_lista = not st.session_state.recolher_extrato_lista
-        st.rerun()
-    if not st.session_state.recolher_extrato_lista:
-        for _, row in df_tx.iterrows():
-            is_s = row["tipo"] == "Saída"
-            st.markdown(f'<div class="ledger-row"><div><strong>{row["descricao"]}</strong><br><span style="font-size:0.64rem;color:#64748b;">{row["data"]} · {row["banco"]} ({row["meio"]})</span></div><div style="font-family:JetBrains Mono;font-weight:700;color:{"#fb7185" if is_s else "#34d399"};">{"-" if is_s else "+"} R$ {row["valor"]:,.2f}</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-hdr"><span class="panel-hdr-title">◈ Exportação Executiva</span><span class="panel-hdr-sub">PDF & WHATSAPP</span></div>', unsafe_allow_html=True)
+    tot_parc_m = float(df_parc["valor_parcela"].sum()) if not df_parc.empty else 0.0
+    tot_rest_p = sum((r["total_parcelas"] - r["parcela_atual"]) * r["valor_parcela"] for _, r in df_parc.iterrows()) if not df_parc.empty else 0.0
+    diags_pdf = [{"titulo": "Balanco Consolidado do Ciclo", "desc": f"Saldo em conta R$ {total_saldos:,.2f} | Renda futura livre R$ {renda_futura_livre:,.2f} | Faturas R$ {total_faturas:,.2f}"}]
+    pdf_b = gerar_relatorio_pdf(df_bancos, entradas_futuras_brutas, saidas_comprometidas_ciclo, projecao_com_futuro, tot_parc_m, tot_rest_p, diags_pdf)
+    txt_wpp = f"*RELATORIO FINANCAS.OS ({dt_hero_ini.strftime('%d/%m')} a {dt_hero_fim.strftime('%d/%m')})*\n• Saldo em Conta: R$ {total_saldos:,.2f}\n• Renda Futura Livre: R$ {renda_futura_livre:,.2f}\n• Faturas: R$ {total_faturas:,.2f}\n• Cheque Especial: R$ {total_cheque:,.2f}"
+    c_e1, c_e2 = st.columns(2)
+    with c_e1:
+        st.download_button("Baixar Relatório PDF", data=pdf_b, file_name=f"relatorio_{dt_hero_ini.strftime('%Y_%m_%d')}.pdf", mime="application/pdf")
+    with c_e2:
+        st.markdown(f'<a href="https://api.whatsapp.com/send?text={urllib.parse.quote(txt_wpp)}" target="_blank"><button style="width:100%;height:38px;background:#10b981;color:#060911;border:none;border-radius:8px;font-weight:700;font-size:0.76rem;cursor:pointer;">Enviar Resumo WhatsApp</button></a>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 elif st.session_state.menu_nav == "Configurações":
     st.markdown('<div class="tech-panel">', unsafe_allow_html=True)
-    st.markdown('<div class="panel-hdr-title">◈ Backup & Persistência</div>', unsafe_allow_html=True)
-    if os.path.exists("financas.db"):
-        with open("financas.db", "rb") as f_db:
-            st.download_button("Exportar Database (.db)", data=f_db.read(), file_name=f"backup_financas_{datetime.now().strftime('%Y_%m_%d')}.db", mime="application/octet-stream")
+    st.markdown('<div class="panel-hdr"><span class="panel-hdr-title">◈ Configuração de Instituições & Limites</span><span class="panel-hdr-sub">DATABASE</span></div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="btn-clear" style="margin-bottom:10px;">', unsafe_allow_html=True)
+    if st.button("Zerar Todos os Saldos e Faturas"):
+        zerar_saldos_e_faturas()
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    banco_edit = st.selectbox("Instituição", df_bancos["banco"].tolist())
+    row_b = df_bancos[df_bancos["banco"] == banco_edit].iloc[0]
+    with st.form("form_cfg_pro"):
+        possui_c = st.checkbox("Possui Cartão de Crédito ativo", value=bool(row_b.get("tem_cartao", 1)))
+        c1, c2, c3 = st.columns(3)
+        with c1: n_sal = st.number_input("Saldo Conta (R$)", value=float(row_b["saldo_conta"]), step=10.0)
+        with c2: l_chq = st.number_input("Limite Cheque Esp.", value=float(row_b["limite_cheque_especial"]), step=100.0)
+        with c3: u_chq = st.number_input("Cheque Usado (R$)", value=float(row_b["cheque_especial_usado"]), step=10.0)
+        if possui_c:
+            cc1, cc2, cc3, cc4 = st.columns(4)
+            with cc1: n_lim = st.number_input("Limite Total", value=float(row_b["limite_cartao"]), step=100.0)
+            with cc2: n_fat = st.number_input("Fatura Atual", value=float(row_b["fatura_atual"]), step=10.0)
+            with cc3: n_lib = st.number_input("Limite Liberado", value=float(row_b.get("limite_liberado", 0.0)), step=100.0)
+            with cc4: d_ven = st.number_input("Dia Vencimento", 1, 31, int(row_b.get("dia_vencimento", 10)))
+            d_fec = st.number_input("Dia Fechamento", 1, 31, int(row_b.get("dia_fechamento", 3)))
+        else:
+            n_lim, n_fat, n_lib, d_ven, d_fec = 0.0, 0.0, 0.0, 10, 3
+        if st.form_submit_button("Salvar Configurações"):
+            atualizar_banco_completo(banco_edit, 1 if possui_c else 0, n_fat, n_lim, n_lib, n_sal, l_chq, u_chq, d_ven, d_fec)
+            st.success("Configurações atualizadas!")
+            st.rerun()
+
+    st.markdown('<div class="panel-hdr" style="margin-top:16px;"><span class="panel-hdr-title">◈ Backup & Restauração (.db)</span></div>', unsafe_allow_html=True)
+    cb1, cb2 = st.columns(2)
+    with cb1:
+        if os.path.exists("financas.db"):
+            with open("financas.db", "rb") as f_db:
+                st.download_button("Exportar Database (.db)", data=f_db.read(), file_name=f"backup_financas_{datetime.now().strftime('%Y_%m_%d')}.db", mime="application/octet-stream")
+    with cb2:
+        up_db = st.file_uploader("Restaurar .db", type=["db"], label_visibility="collapsed")
+        if up_db is not None and st.button("Confirmar Restauração"):
+            with open("financas.db", "wb") as f_out:
+                f_out.write(up_db.read())
+            st.success("Restaurado!")
+            st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
