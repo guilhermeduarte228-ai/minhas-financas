@@ -475,6 +475,16 @@ def init_db():
             valor TEXT
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS alocacoes_previstas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data_alocacao TEXT UNIQUE,
+            cliente TEXT DEFAULT 'Cliente Alocação',
+            valor_diaria REAL DEFAULT 128.78,
+            valor_gasolina REAL DEFAULT 30.00,
+            valor_pedagio REAL DEFAULT 25.60
+        )
+    """)
     
     # Migrações seguras
     c.execute("PRAGMA table_info(contas_bancarias)")
@@ -583,6 +593,47 @@ def get_historico_reembolsos():
     df = pd.read_sql_query("SELECT * FROM reembolsos_destinados ORDER BY id DESC", conn)
     conn.close()
     return df
+
+def get_alocacoes():
+    conn = sqlite3.connect("financas.db")
+    df = pd.read_sql_query("SELECT * FROM alocacoes_previstas ORDER BY data_alocacao ASC", conn)
+    conn.close()
+    return df
+
+def toggle_alocacao_dia(data_str, cliente="Alocação Cliente", valor_diaria=128.78, valor_gasolina=30.00, valor_pedagio=25.60):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("SELECT id FROM alocacoes_previstas WHERE data_alocacao = ?", (data_str,))
+    row = c.fetchone()
+    if row:
+        c.execute("DELETE FROM alocacoes_previstas WHERE id = ?", (row[0],))
+    else:
+        c.execute("""
+            INSERT INTO alocacoes_previstas (data_alocacao, cliente, valor_diaria, valor_gasolina, valor_pedagio)
+            VALUES (?, ?, ?, ?, ?)
+        """, (data_str, cliente, float(valor_diaria), float(valor_gasolina), float(valor_pedagio)))
+    conn.commit()
+    conn.close()
+
+def definir_dias_uteis_alocacao(lista_datas_str, cliente="Alocação Cliente", valor_diaria=128.78, valor_gasolina=30.00, valor_pedagio=25.60):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    for d_str in lista_datas_str:
+        c.execute("SELECT id FROM alocacoes_previstas WHERE data_alocacao = ?", (d_str,))
+        if not c.fetchone():
+            c.execute("""
+                INSERT INTO alocacoes_previstas (data_alocacao, cliente, valor_diaria, valor_gasolina, valor_pedagio)
+                VALUES (?, ?, ?, ?, ?)
+            """, (d_str, cliente, float(valor_diaria), float(valor_gasolina), float(valor_pedagio)))
+    conn.commit()
+    conn.close()
+
+def limpar_alocacoes_periodo(dt_ini_str, dt_fim_str):
+    conn = sqlite3.connect("financas.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM alocacoes_previstas WHERE data_alocacao >= ? AND data_alocacao <= ?", (dt_ini_str, dt_fim_str))
+    conn.commit()
+    conn.close()
 
 def get_reembolsos_itens():
     conn = sqlite3.connect("financas.db")
@@ -1152,6 +1203,7 @@ df_prev = get_previstos()
 df_parc = get_parcelas()
 df_reemb_hist = get_historico_reembolsos()
 df_reemb_itens = get_reembolsos_itens()
+df_aloc = get_alocacoes()
 
 total_faturas = df_bancos[df_bancos["tem_cartao"] == 1]["fatura_atual"].sum()
 total_saldos = df_bancos["saldo_conta"].sum()
@@ -1783,8 +1835,148 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
     </div>
     """, unsafe_allow_html=True)
 
-    # Botão de toggle para calculadora de estimativa
-    btn_calc_label = "➖ Ocultar Calculadora" if st.session_state.mostrar_calc_km else "🧮 Calculadora de Estimativa (R$ 130/dia + Pedágios)"
+    # --- CALENDÁRIO INTERATIVO DE PREVISÃO DE ALOCAÇÃO NOS CLIENTES ---
+    if "aloc_cal_mes" not in st.session_state:
+        st.session_state.aloc_cal_mes = st.session_state.cal_mes
+    if "aloc_cal_ano" not in st.session_state:
+        st.session_state.aloc_cal_ano = st.session_state.cal_ano
+    if "mostrar_cal_aloc" not in st.session_state:
+        st.session_state.mostrar_cal_aloc = True
+
+    btn_aloc_lbl = "➖ Ocultar Calendário de Alocações" if st.session_state.mostrar_cal_aloc else "🗓️ Calendário de Previsão de Alocação (Marcar Dias)"
+    if st.button(btn_aloc_lbl, key="toggle_cal_aloc"):
+        st.session_state.mostrar_cal_aloc = not st.session_state.mostrar_cal_aloc
+        st.rerun()
+
+    if st.session_state.mostrar_cal_aloc:
+        st.markdown('<div style="background: #111a28; border: 1px solid #243652; border-radius: 14px; padding: 12px; margin-bottom: 14px;">', unsafe_allow_html=True)
+        meses_aloc_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        nome_m_aloc = meses_aloc_nomes[st.session_state.aloc_cal_mes - 1]
+
+        ca_nav1, ca_nav2, ca_nav3 = st.columns([3.2, 1.4, 1.4])
+        with ca_nav1:
+            st.markdown(f'<div style="font-size: 0.80rem; font-weight: 800; color: #38bdf8; padding-top: 6px;">🗓️ Alocações • {nome_m_aloc}/{st.session_state.aloc_cal_ano}</div>', unsafe_allow_html=True)
+        with ca_nav2:
+            if st.button("◀", key="aloc_m_ant", help="Mês anterior"):
+                if st.session_state.aloc_cal_mes == 1:
+                    st.session_state.aloc_cal_mes = 12
+                    st.session_state.aloc_cal_ano -= 1
+                else:
+                    st.session_state.aloc_cal_mes -= 1
+                st.rerun()
+        with ca_nav3:
+            if st.button("▶", key="aloc_m_prox", help="Próximo mês"):
+                if st.session_state.aloc_cal_mes == 12:
+                    st.session_state.aloc_cal_mes = 1
+                    st.session_state.aloc_cal_ano += 1
+                else:
+                    st.session_state.aloc_cal_mes += 1
+                st.rerun()
+
+        st.caption("Clique nos dias do calendário para marcar/desmarcar sua previsibilidade de alocação (R$ 128,78 diária + R$ 25,60 pedágio):")
+
+        # Parâmetros padrão da alocação editáveis rapidamente
+        cp_a1, cp_a2, cp_a3 = st.columns(3)
+        with cp_a1:
+            val_diaria_aloc = st.number_input("Diária (R$)", min_value=0.0, value=128.78, step=1.0, key="inp_diaria_aloc")
+        with cp_a2:
+            val_gas_aloc = st.number_input("Gasolina/dia", min_value=0.0, value=30.00, step=1.0, key="inp_gas_aloc")
+        with cp_a3:
+            val_ped_aloc = st.number_input("Pedágio/dia", min_value=0.0, value=25.60, step=1.0, key="inp_ped_aloc")
+
+        # Datas marcadas atualmente
+        datas_marcadas_set = set(df_aloc["data_alocacao"].tolist()) if not df_aloc.empty else set()
+
+        # Grade mensal clicável (Seg a Dom)
+        cal_matrix = calendar.monthcalendar(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)
+        dias_hdr = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+        cols_h = st.columns(7)
+        for idx_h, dh in enumerate(dias_hdr):
+            cols_h[idx_h].markdown(f"<div style='text-align:center; font-size:0.62rem; font-weight:700; color:#64748b;'>{dh}</div>", unsafe_allow_html=True)
+
+        for sem_idx, semana in enumerate(cal_matrix):
+            cols_w = st.columns(7)
+            for d_idx, dia_num in enumerate(semana):
+                if dia_num == 0:
+                    cols_w[d_idx].markdown("<div style='height:34px;'></div>", unsafe_allow_html=True)
+                else:
+                    dt_cell = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, dia_num)
+                    dt_cell_str = dt_cell.strftime("%Y-%m-%d")
+                    is_marked = (dt_cell_str in datas_marcadas_set)
+                    lbl_btn = f"🚗{dia_num}" if is_marked else f"{dia_num}"
+                    if cols_w[d_idx].button(
+                        lbl_btn,
+                        key=f"cal_aloc_btn_{dt_cell_str}",
+                        type="primary" if is_marked else "secondary",
+                        help=f"{'Remover' if is_marked else 'Marcar'} alocação em {dt_cell.strftime('%d/%m/%Y')}"
+                    ):
+                        toggle_alocacao_dia(dt_cell_str, "Alocação Cliente", val_diaria_aloc, val_gas_aloc, val_ped_aloc)
+                        st.rerun()
+
+        # Botões rápidos: Marcar Seg-Sex do mês / Limpar mês
+        dt_m_ini = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, 1)
+        last_day_m = calendar.monthrange(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes)[1]
+        dt_m_fim = date(st.session_state.aloc_cal_ano, st.session_state.aloc_cal_mes, last_day_m)
+
+        ca_act1, ca_act2 = st.columns(2)
+        with ca_act1:
+            if st.button("⚡ Marcar Dias Úteis (Seg-Sex)", key="btn_marcar_uteis_aloc"):
+                uteis = []
+                cur_d = dt_m_ini
+                while cur_d <= dt_m_fim:
+                    if cur_d.weekday() < 5:
+                        uteis.append(cur_d.strftime("%Y-%m-%d"))
+                    cur_d += timedelta(days=1)
+                definir_dias_uteis_alocacao(uteis, "Alocação Cliente", val_diaria_aloc, val_gas_aloc, val_ped_aloc)
+                st.rerun()
+        with ca_act2:
+            st.markdown('<div class="btn-clear">', unsafe_allow_html=True)
+            if st.button("🗑️ Limpar Mês", key="btn_limpar_mes_aloc"):
+                limpar_alocacoes_periodo(dt_m_ini.strftime("%Y-%m-%d"), dt_m_fim.strftime("%Y-%m-%d"))
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # Resumo consolidado do mês marcado com a matemática exata!
+        df_aloc_mes = pd.DataFrame()
+        if not df_aloc.empty:
+            df_aloc_mes = df_aloc[(df_aloc["data_alocacao"] >= dt_m_ini.strftime("%Y-%m-%d")) & (df_aloc["data_alocacao"] <= dt_m_fim.strftime("%Y-%m-%d"))]
+
+        qtd_dias_aloc = len(df_aloc_mes)
+        tot_diarias_bruto = df_aloc_mes["valor_diaria"].sum() if qtd_dias_aloc > 0 else 0.0
+        tot_gas_mes = df_aloc_mes["valor_gasolina"].sum() if qtd_dias_aloc > 0 else 0.0
+        tot_ped_mes = df_aloc_mes["valor_pedagio"].sum() if qtd_dias_aloc > 0 else 0.0
+        tot_lucro_liq_aloc = tot_diarias_bruto - tot_gas_mes
+        tot_reembolso_esperado = tot_diarias_bruto + tot_ped_mes
+
+        st.markdown(f"""
+        <div style="background: #0d1522; border: 1px solid #1f2f47; border-radius: 12px; padding: 10px; margin-top: 8px;">
+            <div style="font-size: 0.70rem; font-weight: 800; color: #38bdf8; text-transform: uppercase;">
+                📊 Resumo das Alocações em {nome_m_aloc} ({qtd_dias_aloc} dia(s) marcado(s)):
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; font-size: 0.68rem;">
+                <div style="background: #111a28; padding: 6px 8px; border-radius: 8px;">
+                    <span style="color: #94a3b8;">⛽ Gasolina (R$ {val_gas_aloc:,.2f}/dia):</span><br>
+                    <strong style="color: #f87171; font-family: 'JetBrains Mono'; font-size: 0.82rem;">R$ {tot_gas_mes:,.2f}</strong>
+                </div>
+                <div style="background: #111a28; padding: 6px 8px; border-radius: 8px;">
+                    <span style="color: #94a3b8;">🛣️ Pedágios (R$ {val_ped_aloc:,.2f}/dia):</span><br>
+                    <strong style="color: #fbbf24; font-family: 'JetBrains Mono'; font-size: 0.82rem;">R$ {tot_ped_mes:,.2f}</strong>
+                </div>
+                <div style="background: #111a28; padding: 6px 8px; border-radius: 8px;">
+                    <span style="color: #94a3b8;">💰 Seu Lucro Líquido (R$ {(val_diaria_aloc - val_gas_aloc):,.2f}/dia):</span><br>
+                    <strong style="color: #4ade80; font-family: 'JetBrains Mono'; font-size: 0.82rem;">R$ {tot_lucro_liq_aloc:,.2f}</strong>
+                </div>
+                <div style="background: #111a28; padding: 6px 8px; border-radius: 8px;">
+                    <span style="color: #94a3b8;">📥 Reembolso Total Empresa:</span><br>
+                    <strong style="color: #38bdf8; font-family: 'JetBrains Mono'; font-size: 0.82rem;">R$ {tot_reembolso_esperado:,.2f}</strong>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Botão de toggle para calculadora rápida de estimativa (com a matemática corrigida: R$ 128,78 - R$ 30,00 = R$ 98,78 lucro + R$ 25,60 pedágio)
+    btn_calc_label = "➖ Ocultar Calculadora Rápida" if st.session_state.mostrar_calc_km else "🧮 Calculadora Rápida (R$ 128,78/dia + R$ 25,60 Pedágio)"
     if st.button(btn_calc_label, key="toggle_calc_km"):
         st.session_state.mostrar_calc_km = not st.session_state.mostrar_calc_km
         st.rerun()
@@ -1796,14 +1988,17 @@ elif st.session_state.bloco_ativo == "destinar_reembolso":
             dias_est = st.number_input("Dias de alocação", min_value=1, value=5, step=1)
             pedagio_dia = st.number_input("Pedágio diário (Ida + Volta)", min_value=0.0, value=25.60, step=1.0)
         with c_c2:
-            gasolina_est = dias_est * 30.0
-            diarias_lucro = dias_est * 100.0
+            diaria_bruta_unit = 128.78
+            gasolina_unit = 30.00
+            lucro_unit = diaria_bruta_unit - gasolina_unit  # R$ 98,78 / dia
+            gasolina_est = dias_est * gasolina_unit
+            diarias_lucro = dias_est * lucro_unit
             pedagio_total_est = dias_est * pedagio_dia
-            total_est = (dias_est * 130.0) + pedagio_total_est
-            st.caption(f"⛽ Gasolina (R$ 30/dia): **R$ {gasolina_est:,.2f}**")
-            st.caption(f"💰 Lucro Livre (R$ 100/dia): **R$ {diarias_lucro:,.2f}**")
-            st.caption(f"🛣️ Pedágios Cartão: **R$ {pedagio_total_est:,.2f}**")
-            st.markdown(f"**Total Esperado:** <span style='color: #4ade80; font-weight: 800;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
+            total_est = (dias_est * diaria_bruta_unit) + pedagio_total_est
+            st.caption(f"⛽ Gasolina (R$ 30,00/dia): **R$ {gasolina_est:,.2f}**")
+            st.caption(f"💰 Lucro Livre (R$ {lucro_unit:,.2f}/dia): **R$ {diarias_lucro:,.2f}**")
+            st.caption(f"🛣️ Pedágios Reembolsados: **R$ {pedagio_total_est:,.2f}**")
+            st.markdown(f"**Reembolso Total:** <span style='color: #4ade80; font-weight: 800;'>R$ {total_est:,.2f}</span>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     # Escolha de quantos destinos o usuário quer configurar
@@ -2236,29 +2431,28 @@ elif st.session_state.bloco_ativo == "advisor":
             f"Como você não tem parcelas longas pesando nos próximos meses, cortar os ralos abaixo aumenta sua sobra imediatamente já no próximo ciclo."
         )
 
-    # Mini tabela visual de 6 meses dentro do Advisor
-    cols_6m_html = ""
+    # Mini tabela visual de 6 meses dentro do Advisor (HTML compacto sem indentação para evitar code-block do Markdown!)
+    cols_6m_parts = []
     for p6 in projecoes_6m:
         c_s = "#4ade80" if p6["sobra"] >= 0 else "#f87171"
-        cols_6m_html += f"""
-        <div style="background: #111a28; border: 1px solid #1e2d44; border-radius: 8px; padding: 6px 4px; text-align: center;">
-            <div style="font-size: 0.60rem; color: #94a3b8; font-weight: 700;">{p6['mes']}</div>
-            <div style="font-family: 'JetBrains Mono'; font-size: 0.68rem; font-weight: 800; color: {c_s}; margin-top: 2px;">
-                {'+' if p6['sobra'] >= 0 else ''}{p6['sobra']:,.0f}
-            </div>
-            <div style="font-size: 0.52rem; color: #64748b; margin-top: 1px;">Parc: {p6['parcelas']:,.0f}</div>
-        </div>
-        """
+        s_txt = f"{'+' if p6['sobra'] >= 0 else ''}{p6['sobra']:,.0f}"
+        cols_6m_parts.append(
+            f'<div style="background:#111a28;border:1px solid #1e2d44;border-radius:8px;padding:6px 4px;text-align:center;">'
+            f'<div style="font-size:0.60rem;color:#94a3b8;font-weight:700;">{p6["mes"]}</div>'
+            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.68rem;font-weight:800;color:{c_s};margin-top:2px;">{s_txt}</div>'
+            f'<div style="font-size:0.52rem;color:#64748b;margin-top:1px;">Parc: {p6["parcelas"]:,.0f}</div>'
+            f'</div>'
+        )
+    cols_6m_html = "".join(cols_6m_parts)
 
-    st.markdown(f"""
-    <div style="background: linear-gradient(145deg, #132136 0%, #0d1624 100%); border: 1px solid #2b456b; border-radius: 14px; padding: 12px; margin: 8px 0 12px 0;">
-        <div style="font-size: 0.74rem; font-weight: 800; color: #38bdf8; text-transform: uppercase;">📈 Projeção de Virada (Próximos 6 Meses)</div>
-        <div style="font-size: 0.72rem; color: #e2e8f0; margin-top: 5px; line-height: 1.45;">{resumo_virada_html}</div>
-        <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 10px;">
-            {cols_6m_html}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="background:linear-gradient(145deg,#132136 0%,#0d1624 100%);border:1px solid #2b456b;border-radius:14px;padding:12px;margin:8px 0 12px 0;">'
+        f'<div style="font-size:0.74rem;font-weight:800;color:#38bdf8;text-transform:uppercase;">📈 Projeção de Virada (Próximos 6 Meses)</div>'
+        f'<div style="font-size:0.72rem;color:#e2e8f0;margin-top:5px;line-height:1.45;">{resumo_virada_html}</div>'
+        f'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:10px;">{cols_6m_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
 
     # --- 2. ONDE VOCÊ ESTÁ PERDENDO DINHEIRO (RALOS FINANCEIROS DETECTADOS) ---
     ralos = []
@@ -2389,11 +2583,43 @@ elif st.session_state.bloco_ativo == "advisor":
                 )
             })
 
-    # --- 5. ESTRATÉGIA PARA PAGAR GASOLINA E PEDÁGIO DAS PRÓXIMAS ALOCAÇÕES ---
+    # --- 5. ESTRATÉGIA MENSAL PRECISA PARA GASOLINA & PEDÁGIO COM BASE NO CALENDÁRIO DE ALOCAÇÕES ---
     dia_hoje = date.today().day
-    cartoes_disp = df_bancos[df_bancos["tem_cartao"] == 1].copy()
-    melhor_cartao_msg = ""
+    last_d_adv = calendar.monthrange(st.session_state.cal_ano, st.session_state.cal_mes)[1]
+    dt_m_adv_ini = date(st.session_state.cal_ano, st.session_state.cal_mes, 1).strftime("%Y-%m-%d")
+    dt_m_adv_fim = date(st.session_state.cal_ano, st.session_state.cal_mes, last_d_adv).strftime("%Y-%m-%d")
 
+    df_aloc_adv = pd.DataFrame()
+    if not df_aloc.empty:
+        df_aloc_adv = df_aloc[(df_aloc["data_alocacao"] >= dt_m_adv_ini) & (df_aloc["data_alocacao"] <= dt_m_adv_fim)]
+
+    qtd_dias_prev_aloc = len(df_aloc_adv)
+    if qtd_dias_prev_aloc > 0:
+        gasto_gas_mensal_aloc = float(df_aloc_adv["valor_gasolina"].sum())
+        gasto_ped_mensal_aloc = float(df_aloc_adv["valor_pedagio"].sum())
+        lucro_liq_mensal_aloc = float(df_aloc_adv["valor_diaria"].sum()) - gasto_gas_mensal_aloc
+        reemb_tot_mensal_aloc = float(df_aloc_adv["valor_diaria"].sum()) + gasto_ped_mensal_aloc
+    else:
+        # Fallback: se ainda não marcou dias no calendário, estima para 1 semana padrão (5 dias) e avisa para marcar
+        qtd_dias_prev_aloc = 5
+        gasto_gas_mensal_aloc = 5 * 30.00
+        gasto_ped_mensal_aloc = 5 * 25.60
+        lucro_liq_mensal_aloc = 5 * 98.78
+        reemb_tot_mensal_aloc = 5 * (128.78 + 25.60)
+
+    custo_operacional_aloc = gasto_gas_mensal_aloc + gasto_ped_mensal_aloc
+    tag_origem_aloc = (
+        f"Com base nos <strong>{qtd_dias_prev_aloc} dias marcados</strong> no Calendário de Alocações de {nome_mes_adv}"
+        if not df_aloc_adv.empty else
+        f"<em>(Simulação base de 5 dias — marque os dias exatos em ⛽ Destinar Reembolso → 🗓️ Calendário de Alocações)</em>"
+    )
+
+    # Analisa melhor conta corrente para pagar Gasolina à vista e melhor cartão para passar Pedágio (ou ambos)
+    contas_com_saldo = df_bancos[df_bancos["saldo_conta"] > 0].sort_values(by="saldo_conta", ascending=False)
+    melhor_conta_gas = contas_com_saldo.iloc[0] if not contas_com_saldo.empty else None
+
+    cartoes_disp = df_bancos[df_bancos["tem_cartao"] == 1].copy()
+    melhor_cartao_row = None
     if not cartoes_disp.empty:
         def score_cartao(row):
             lim_t = float(row["limite_cartao"])
@@ -2410,41 +2636,57 @@ elif st.session_state.bloco_ativo == "advisor":
             return pd.Series([lim_lib, dias_prazo, status_ciclo])
 
         cartoes_disp[["lim_real", "dias_prazo", "status_ciclo"]] = cartoes_disp.apply(score_cartao, axis=1)
-        cartoes_com_limite = cartoes_disp[cartoes_disp["lim_real"] >= 100.0].sort_values(by=["dias_prazo", "lim_real"], ascending=[False, False])
+        cartoes_validos = cartoes_disp[cartoes_disp["lim_real"] >= 50.0].sort_values(by=["dias_prazo", "lim_real"], ascending=[False, False])
+        if not cartoes_validos.empty:
+            melhor_cartao_row = cartoes_validos.iloc[0]
 
-        if not cartoes_com_limite.empty:
-            top_c = cartoes_com_limite.iloc[0]
-            melhor_cartao_msg = (
-                f"<strong>Use o Cartão {top_c['banco']}</strong> para Pedágio e Gasolina: ele tem "
-                f"<strong>R$ {top_c['lim_real']:,.2f}</strong> de limite liberado real, {top_c['status_ciclo']} "
-                f"e vence dia {int(top_c['dia_vencimento'])} (~{int(top_c['dias_prazo'])} dias de prazo)."
-            )
+    # Monta orientação precisa de onde tirar Gasolina (R$ 30/dia) e Pedágio (R$ 25,60/dia)
+    resumo_valores_aloc = (
+        f"{tag_origem_aloc}:<br>"
+        f"• <strong>Gasolina do Mês:</strong> R$ {gasto_gas_mensal_aloc:,.2f} (R$ 30,00/dia)<br>"
+        f"• <strong>Pedágios do Mês:</strong> R$ {gasto_ped_mensal_aloc:,.2f} (R$ 25,60/dia)<br>"
+        f"• <strong>Capital de Giro Necessário:</strong> R$ {custo_operacional_aloc:,.2f} • <strong>Seu Lucro Livre:</strong> <span style='color:#4ade80;'>R$ {lucro_liq_mensal_aloc:,.2f}</span><br><br>"
+    )
 
-    if total_saldos >= 200.0 and melhor_cartao_msg:
-        desc_estrategia = (
-            f"<strong>1º Opção (Recomendada):</strong> {melhor_cartao_msg}<br>"
-            f"<strong>2º Opção (À vista):</strong> Você também possui R$ {total_saldos:,.2f} em conta se preferir pagar no débito/Pix.<br>"
-            f"<strong>🚫 Evite Cheque Especial:</strong> Nunca use o cheque especial enquanto tiver saldo em conta ou limite no cartão."
+    if melhor_conta_gas is not None and float(melhor_conta_gas["saldo_conta"]) >= gasto_gas_mensal_aloc and melhor_cartao_row is not None and float(melhor_cartao_row["lim_real"]) >= gasto_ped_mensal_aloc:
+        orientacao_fonte = (
+            f"<strong>✅ Divisão Ideal (Zero Juros):</strong><br>"
+            f"1. <strong>Gasolina (R$ {gasto_gas_mensal_aloc:,.2f}):</strong> Tire à vista no Pix/Débito da conta <strong>{melhor_conta_gas['banco']}</strong> (saldo atual: R$ {melhor_conta_gas['saldo_conta']:,.2f}).<br>"
+            f"2. <strong>Pedágios (R$ {gasto_ped_mensal_aloc:,.2f}):</strong> Passe no <strong>Cartão {melhor_cartao_row['banco']}</strong> (limite livre: R$ {melhor_cartao_row['lim_real']:,.2f} • {melhor_cartao_row['status_ciclo']}, vence dia {int(melhor_cartao_row['dia_vencimento'])}).<br>"
+            f"3. <strong>Quando cair o reembolso (R$ {reemb_tot_mensal_aloc:,.2f}):</strong> Abata R$ {gasto_ped_mensal_aloc:,.2f} na fatura do {melhor_cartao_row['banco']}, reponha R$ {gasto_gas_mensal_aloc:,.2f} no {melhor_conta_gas['banco']} e embolse <strong>R$ {lucro_liq_mensal_aloc:,.2f}</strong> livres!"
         )
         tipo_est = "success"
-    elif melhor_cartao_msg:
-        desc_estrategia = (
-            f"<strong>NÃO use o Cheque Especial!</strong> Seu saldo em conta está baixo (R$ {total_saldos:,.2f}), mas você tem limite no crédito. "
-            f"{melhor_cartao_msg}"
+    elif melhor_cartao_row is not None and float(melhor_cartao_row["lim_real"]) >= custo_operacional_aloc:
+        orientacao_fonte = (
+            f"<strong>💳 Concentre Tudo no Cartão {melhor_cartao_row['banco']} (Sem Juros):</strong><br>"
+            f"Seu saldo em conta corrente (R$ {total_saldos:,.2f}) não cobre toda a gasolina à vista, mas o <strong>Cartão {melhor_cartao_row['banco']}</strong> tem "
+            f"<strong>R$ {melhor_cartao_row['lim_real']:,.2f}</strong> de limite livre e {melhor_cartao_row['status_ciclo']} (vence dia {int(melhor_cartao_row['dia_vencimento'])}).<br>"
+            f"• Passe tanto os <strong>Pedágios (R$ {gasto_ped_mensal_aloc:,.2f})</strong> quanto a <strong>Gasolina (R$ {gasto_gas_mensal_aloc:,.2f})</strong> nele, evitando o Cheque Especial.<br>"
+            f"• Quando entrar o reembolso (R$ {reemb_tot_mensal_aloc:,.2f}), destine <strong>R$ {custo_operacional_aloc:,.2f}</strong> direto para abater essa fatura e fique com <strong>R$ {lucro_liq_mensal_aloc:,.2f}</strong> livres."
         )
         tipo_est = "info"
+    elif melhor_cartao_row is not None:
+        lim_c_disp = float(melhor_cartao_row["lim_real"])
+        falta_cobertura = max(0.0, custo_operacional_aloc - (total_saldos + lim_c_disp))
+        orientacao_fonte = (
+            f"<strong>⚖️ Estratégia Híbrida (Cartão + Conta):</strong><br>"
+            f"• Use os <strong>R$ {lim_c_disp:,.2f}</strong> disponíveis no <strong>Cartão {melhor_cartao_row['banco']}</strong> para cobrir os Pedágios (R$ {gasto_ped_mensal_aloc:,.2f}).<br>"
+            f"• Para a Gasolina (R$ {gasto_gas_mensal_aloc:,.2f}), use seu saldo em conta (R$ {total_saldos:,.2f})."
+            + (f" Apenas se faltar <strong>R$ {falta_cobertura:,.2f}</strong> antes do reembolso cair, use o Cheque Especial de menor taxa por poucos dias." if falta_cobertura > 0 else "")
+        )
+        tipo_est = "warning"
     else:
-        desc_estrategia = (
-            f"<strong>Atenção:</strong> Seus cartões estão sem limite livre suficiente (ou desativados) e seu saldo atual é R$ {total_saldos:,.2f}. "
-            f"Utilize o <strong>Cheque Especial de menor taxa</strong> apenas pelo valor exato da gasolina/pedágio da viagem e "
-            f"registre imediatamente na aba <strong>⛽ Destinar Reembolso</strong> para cobrir assim que a empresa pagar."
+        orientacao_fonte = (
+            f"<strong>⚠️ Atenção ao Capital de Giro:</strong> Seus cartões estão sem limite livre suficiente e seu saldo em conta é R$ {total_saldos:,.2f}. "
+            f"Utilize o <strong>Cheque Especial de menor taxa</strong> apenas conforme os dias forem acontecendo (R$ 55,60/dia para gasolina + pedágio) e "
+            f"destine <strong>R$ {custo_operacional_aloc:,.2f}</strong> do reembolso para zerar o limite imediatamente."
         )
         tipo_est = "warning"
 
     diagnosticos.append({
-        "titulo": "⛽ Melhor Forma de Pagar Gasolina & Pedágio Agora:",
+        "titulo": "⛽ Plano Mensal de Gasolina & Pedágio (Alocações):",
         "tipo": tipo_est,
-        "desc": desc_estrategia
+        "desc": resumo_valores_aloc + orientacao_fonte
     })
 
     for diag in diagnosticos:
